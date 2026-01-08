@@ -1,0 +1,8 @@
+# project
+/.idea/
+/.venv/
+/dist/
+/*.egg-info/
+
+# compiled files
+*.pyc
