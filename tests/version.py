@@ -8,6 +8,7 @@ import tomli
 
 import fabopsy_lib
 import fabopsy_lib.api
+from fabopsy_lib.utils.logger import logger
 
 
 def main() -> Optional[int]:
@@ -20,9 +21,9 @@ def main() -> Optional[int]:
     library_version = fabopsy_lib.___version___
 
     if project_version != library_version:
-        logging.warning(f"project and library version mismatch:\n"
-                        f"\tfabopsy_lib.___version___ = '{library_version}'\n"
-                        f"\tpyproject.toml > project > version = '{project_version}'")
+        logger.warning(f"project and library version mismatch:\n"
+                       f"\tfabopsy_lib.___version___ = '{library_version}'\n"
+                       f"\tpyproject.toml > project > version = '{project_version}'")
         print(library_version)
         return 1
     else:

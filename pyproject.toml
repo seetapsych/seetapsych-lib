@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Face and body based psychology analysis"
 requires-python = ">=3.10"
 dependencies = [
+    "packaging>=25.0",
     "pydantic>=2.12.5",
     "pyyaml>=6.0.3",
     "tomli>=2.3.0",
 ]
+
+[tool.setuptools]
+package-data = { "fabopsy_lib" = ["modules/*.json", "modules/*.toml", "modules/*.yaml"] }

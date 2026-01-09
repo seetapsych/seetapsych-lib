@@ -10,6 +10,7 @@ import yaml
 
 __all__ = [
     'load',
+    'loads',
 ]
 
 
@@ -32,25 +33,51 @@ map_parser: dict[str, Callable[[str], Any]] = {
     'yml': parse_yaml,
 }
 
+
+def try_parse(content: str) -> tuple[bool, Any]:
+    try:
+        return True, parse_json(content)
+    except Exception:
+        pass
+    try:
+        return True, parse_toml(content)
+    except Exception:
+        pass
+    try:
+        return True, parse_yaml(content)
+    except Exception:
+        pass
+    return False, None
+
+
 def load(f: str | bytes | IO[str] | IO[bytes], extension: str = None) -> Any:
     if isinstance(f, (str, bytes)):
         filename = f.decode(encoding='utf-8') if isinstance(f, bytes) else f
         extension = extension if extension else os.path.splitext(filename)[-1]
-        extension = extension.strip('. ').lower()
         with open(f, 'r', encoding='utf-8') as stream:
             content = stream.read()
     elif hasattr(f, 'read'):
         content = f.read()
-        content = content.decode(encoding='utf-8') if isinstance(content, bytes) else content
     else:
         raise RuntimeError('param f should be: str | bytes | IO[str] | IO[bytes]')
 
-    if not extension:
-        raise RuntimeError('Unable to identify file type')
+    return loads(content, extension)
+
+
+def loads(content: str | bytes, extension: str = None) -> Any:
+    content = content.decode(encoding='utf-8') if isinstance(content, bytes) else content
+
+    if extension:
+        extension = extension.strip('. ').lower()
+    else:
+        ok, parsed = try_parse(content)
+        if ok:
+            return parsed
+        raise RuntimeError('Unable to identify content extension')
 
     parser = map_parser.get(extension)
     if parser is None:
-        raise RuntimeError(f'Unrecognized file type: {extension}')
+        raise RuntimeError(f'Unrecognized file extension: {extension}')
 
     return parser(content)
 

@@ -3,7 +3,7 @@
 import re
 import json
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 
 from pydantic.fields import FieldInfo
 from pydantic import BaseModel, Field
@@ -19,15 +19,15 @@ __all__ = [
 
 
 class SchemaEntity(BaseModel):
-    name: str = Field(..., description='')
-    description: str = Field('', description='')
-    keywords: list[str] = Field([], description='')
+    name: str = Field('', description='')
     version: str = Field(
-        ...,
+        '0.0.0',
         repr=True,
         pattern=r'^(\d+)(?:\.(\d+)(?:\.(\d+))?)?(-(?:[a-zA-Z0-9_.-]+))?(\+(?:[a-zA-Z0-9_.-]+))?$',
         examples=['1.2', '0.1.2', '1.23.3-alpha01', '2.0.1+20260101'],
         description='version like MAJOR[.MINOR[.PATCH]][-PRERELEASE][+BUILD]')
+    description: str = Field('', description='')
+    keywords: list[str] = Field([], description='')
 
     @property
     def format_version(self) -> tuple[int, int, int, str, str]:
@@ -59,12 +59,14 @@ class SchemaModel(SchemaEntity):
         '',
         description='Used to specify the specific models within a multi-model algorithm package')
 
+    recommended: bool = Field(False, description='The recommended model will be used by default')
+
     entry: Optional[SchemaEntry] = Field(
         None,
         description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Model')
 
     host: str = Field(
-        ...,
+        '',
         examples=['modelscope'],
         description='The cloud host to download model')
     model_id: str = Field(
@@ -90,26 +92,36 @@ class SchemaAttribute(BaseModel):
     selection: list[str] = Field(None)
 
 
-class SchemaPackage(BaseModel):
-    entry: SchemaEntry = Field(
-        ...,
-        description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Package')
+class SchemaPackage(SchemaEntity):
     using_models: list[str] = Field(
         [],
         description='If it is greater than 1, the corresponding usage model needs to be used for initialization')
+    inputs: list[str] = Field([], description='Describe modal if this package need multimodal')
+    requires: list[str] = Field([], description='Required attributes to run this package')
+    provides: list[str] = Field([], description='Provided attributes to run this package')
+    entry: SchemaEntry = Field(
+        ...,
+        description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Package')
+    attributes: list[SchemaAttribute] = Field([], description='Attributes for package controlling')
     models: list[SchemaModel] = Field(
         ...,
         description='The available models can be switched according to the situation')
-    requires: list[str] = Field([], description='Required attributes to run this package')
-    provides: list[str] = Field([], description='Provided attributes to run this package')
-    attributes: list[SchemaAttribute] = Field([], description='Attributes for package controlling')
-    inputs: list[str] = Field([], description='Describe modal if this package need multimodal')
 
 
-class SchemaModule(SchemaEntity):
+class SchemaModuleInfo(SchemaEntity):
     requirements: list[str] = Field(
         [],
         description='Python requirements')
+
+
+class SchemaModule(BaseModel):
+    version: Literal['1.0'] = Field(
+        '1.0',
+        examples=['1.0'],
+        description='Module configuration protocol version, which is different from the current module version')
+
+    module: SchemaModuleInfo = Field(..., description="Module information")
+
     packages: list[SchemaPackage] = Field(
         ...,
         description='Packages that can be loaded')
@@ -128,8 +140,12 @@ def parse(obj: dict[str, Any]) -> SchemaModule:
     return SchemaModule(**obj)
 
 
-if __name__ == '__main__':
+def test():
     print(json.dumps(schema(), ensure_ascii=False, indent=2))
     print(example())
-    t = parse({'name': 'Name', 'version': '1.0.0', 'packages': [], 'description': 'No description'})
-    print(t.format_version)
+    t = parse({'version': '1.0', 'module': {'name': 'Name', 'version': '1.0.0', 'description': 'No description'}, 'packages': []})
+    print(t.module.format_version)
+
+
+if __name__ == '__main__':
+    test()
