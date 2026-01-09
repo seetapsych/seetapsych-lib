@@ -3,7 +3,7 @@
 import re
 import json
 from enum import Enum
-from typing import Any, Optional, Literal
+from typing import Any, Optional, Literal, Union
 
 from pydantic.fields import FieldInfo
 from pydantic import BaseModel, Field
@@ -55,6 +55,13 @@ class SchemaEntry(BaseModel):
 
 
 class SchemaModel(SchemaEntity):
+    """
+    Model acquisition configuration.
+    The model can be obtained using the `entry` code.
+    Alternatively, it can be retrieved from the `host` via the `model_id`.
+    Or, you can directly download it using the `download_url` and verify it using the `download_md5`.
+    """
+
     usage: str = Field(
         '',
         description='Used to specify the specific models within a multi-model algorithm package')
@@ -73,6 +80,13 @@ class SchemaModel(SchemaEntity):
         '',
         description='Model id for model hosting repo')
 
+    download_url: str = Field(
+        '',
+        description='Download model link. HTTP recommended')
+    download_md5: str = Field(
+        '',
+        description='Model file md5')
+
 
 class AttributeType(str, Enum):
     Integer = 'integer'
@@ -88,7 +102,7 @@ class AttributeType(str, Enum):
 class SchemaAttribute(BaseModel):
     name: str
     type: AttributeType
-    value: None|int|float|str|list[int]|list[float]|list[str] = Field(None)
+    value: Union[None, int, float, str, list[int], list[float], list[str]] = Field(None)
     selection: list[str] = Field(None)
 
 
