@@ -10,11 +10,20 @@ from typing import Any
 
 from packaging.requirements import Requirement
 
-from fabopsy_lib.schema.module import *
+from fabopsy_lib import api
+from fabopsy_lib import schema
 from fabopsy_lib.utils.logger import logger
 
 
-def unsatisfied_requirements(module: SchemaModule) -> list[str]:
+__all__ = [
+    'unsatisfied_requirements',
+    'install_requirements',
+    'call_entry',
+    'load_package',
+]
+
+
+def unsatisfied_requirements(module: schema.Module) -> list[str]:
     unsatisfied: list[str] = []
     for req_str in module.module.requirements:
         try:
@@ -32,7 +41,7 @@ def unsatisfied_requirements(module: SchemaModule) -> list[str]:
     return unsatisfied
 
 
-def install_requirements(module: SchemaModule, *, index_url: str = None, trusted_host: str | bool = None):
+def install_requirements(module: schema.Module, *, index_url: str = None, trusted_host: str | bool = None):
     unsatisfied = unsatisfied_requirements(module)
     if not unsatisfied:
         return
@@ -84,7 +93,7 @@ def install_requirements(module: SchemaModule, *, index_url: str = None, trusted
         raise RuntimeError(msg) from e
 
 
-def call_entry(entry: SchemaEntry) -> Any:
+def call_entry(entry: schema.Entry) -> Any:
     method = entry.method
     if entry.package:
         method = '.'.join([entry.package, method])
@@ -120,18 +129,23 @@ def call_entry(entry: SchemaEntry) -> Any:
         raise
 
 
+def load_package(package: schema.Package) -> api.Package:
+    return call_entry(package.entry)
+
+
 def hello(*args, **kwargs):
     print('helloworld', args, kwargs)
 
 
 def test():
-    call_entry(SchemaEntry(package='fabopsy_lib.runtime.actions', method='hello',
-                           args=[1, '2', False], kwargs={'a': 1}))
+    call_entry(schema.Entry(
+        package='fabopsy_lib.runtime.actions', method='hello',
+        args=[1, '2', False], kwargs={'a': 1}))
     requirements = [
         'cowsay',
         'packaging>=25.0'
     ]
-    module = SchemaModule(module={'requirements': requirements}, packages=[])
+    module = schema.Module(module={'requirements': requirements}, packages=[])
 
     print(unsatisfied_requirements(module))
     install_requirements(module)

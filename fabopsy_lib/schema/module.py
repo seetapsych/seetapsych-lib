@@ -9,16 +9,14 @@ from pydantic.fields import FieldInfo
 from pydantic import BaseModel, Field
 
 __all__ = [
-    'SchemaEntry',
-    'SchemaModel',
-    'SchemaPackage',
-    'SchemaModule',
-    'schema',
-    'parse',
+    'Entry',
+    'Model',
+    'Package',
+    'Module',
 ]
 
 
-class SchemaEntity(BaseModel):
+class Entity(BaseModel):
     name: str = Field('', description='')
     version: str = Field(
         '0.0.0',
@@ -39,7 +37,7 @@ class SchemaEntity(BaseModel):
         return int(match[1] or 0), int(match[2] or 0), int(match[3] or 0), match[4] or '', match[5] or ''
 
 
-class SchemaEntry(BaseModel):
+class Entry(BaseModel):
     package: Optional[str] = Field(
         None,
         examples=['x.y.z'],
@@ -54,12 +52,34 @@ class SchemaEntry(BaseModel):
     kwargs: dict[str, Any] = Field({})
 
 
-class SchemaModel(SchemaEntity):
+class CloudModel(BaseModel):
+    host: str = Field(
+        ...,
+        examples=['modelscope'],
+        description='The cloud host to download model')
+    model_id: str = Field(
+        ...,
+        description='Model id for model hosting repo')
+
+
+class DownloadModel(BaseModel):
+    url: str = Field(
+        ...,
+        description='Download model link. HTTP recommended')
+    md5: str = Field(
+        '',
+        description='Model file md5')
+    compressed: bool = Field(
+        False,
+        description='Is the downloaded file a compressed file? If so, the file will be automatically decompressed.')
+
+
+class Model(Entity):
     """
     Model acquisition configuration.
     The model can be obtained using the `entry` code.
-    Alternatively, it can be retrieved from the `host` via the `model_id`.
-    Or, you can directly download it using the `download_url` and verify it using the `download_md5`.
+    Alternatively, it can be retrieved from the `host` via the `model_id` in `cloud`.
+    Or, you can directly download it using the `download_url` and verify it using the `download_md5` in `download`.
     """
 
     usage: str = Field(
@@ -68,27 +88,20 @@ class SchemaModel(SchemaEntity):
 
     recommended: bool = Field(False, description='The recommended model will be used by default')
 
-    entry: Optional[SchemaEntry] = Field(
+    entry: Optional[Entry] = Field(
         None,
         description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Model')
 
-    host: str = Field(
-        '',
-        examples=['modelscope'],
-        description='The cloud host to download model')
-    model_id: str = Field(
-        '',
-        description='Model id for model hosting repo')
+    cloud: Optional[CloudModel] = Field(
+        None,
+        description='')
 
-    download_url: str = Field(
-        '',
-        description='Download model link. HTTP recommended')
-    download_md5: str = Field(
-        '',
-        description='Model file md5')
+    download: Optional[DownloadModel] = Field(
+        None,
+        description='')
 
 
-class AttributeType(str, Enum):
+class ParameterType(str, Enum):
     Integer = 'integer'
     Number = 'number'
     String = 'string'
@@ -99,59 +112,60 @@ class AttributeType(str, Enum):
     SelectionArray = 'selection[]'
 
 
-class SchemaAttribute(BaseModel):
+class Parameter(BaseModel):
     name: str
-    type: AttributeType
+    type: ParameterType
     value: Union[None, int, float, str, list[int], list[float], list[str]] = Field(None)
     selection: list[str] = Field(None)
+    description: str = Field('')
 
 
-class SchemaPackage(SchemaEntity):
+class Package(Entity):
     using_models: list[str] = Field(
         [],
         description='If it is greater than 1, the corresponding usage model needs to be used for initialization')
     inputs: list[str] = Field([], description='Describe modal if this package need multimodal')
     requires: list[str] = Field([], description='Required attributes to run this package')
     provides: list[str] = Field([], description='Provided attributes to run this package')
-    entry: SchemaEntry = Field(
+    entry: Entry = Field(
         ...,
         description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Package')
-    attributes: list[SchemaAttribute] = Field([], description='Attributes for package controlling')
-    models: list[SchemaModel] = Field(
+    parameters: list[Parameter] = Field([], description='Parameters for package controlling')
+    models: list[Model] = Field(
         ...,
         description='The available models can be switched according to the situation')
 
 
-class SchemaModuleInfo(SchemaEntity):
+class ModuleInfo(Entity):
     requirements: list[str] = Field(
         [],
         description='Python requirements')
 
 
-class SchemaModule(BaseModel):
+class Module(BaseModel):
     version: Literal['1.0'] = Field(
         '1.0',
         examples=['1.0'],
         description='Module configuration protocol version, which is different from the current module version')
 
-    module: SchemaModuleInfo = Field(..., description="Module information")
+    module: ModuleInfo = Field(..., description="Module information")
 
-    packages: list[SchemaPackage] = Field(
+    packages: list[Package] = Field(
         ...,
         description='Packages that can be loaded')
 
 
 def schema():
-    return SchemaModule.model_json_schema()
+    return Module.model_json_schema()
 
 
 def example() -> str:
-    return SchemaModule.model_construct().model_dump_json(ensure_ascii=False, indent=2)
+    return Module.model_construct().model_dump_json(ensure_ascii=False, indent=2)
 
 
-def parse(obj: dict[str, Any]) -> SchemaModule:
-    SchemaModule.model_validate(obj)
-    return SchemaModule(**obj)
+def parse(obj: dict[str, Any]) -> Module:
+    Module.model_validate(obj)
+    return Module(**obj)
 
 
 def test():

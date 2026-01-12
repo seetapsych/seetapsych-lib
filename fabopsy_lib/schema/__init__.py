@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
 
-from . import module
+from .module import *

@@ -8,7 +8,7 @@ from typing import IO, Optional
 
 from pydantic import BaseModel
 
-from fabopsy_lib.schema.module import SchemaModule, parse
+from fabopsy_lib import schema
 from fabopsy_lib.utils.loader import load, loads
 
 
@@ -22,7 +22,7 @@ __all__ = [
 
 class LoadedModule(BaseModel):
     path: str               # the origin config path
-    module: SchemaModule    # loaded module
+    module: schema.Module   # loaded module
 
 
 builtin_module_root = os.path.join(os.path.dirname(__file__), '..', 'modules')
@@ -40,14 +40,14 @@ def load_builtin_modules() -> list[LoadedModule]:
 
     modules: list[LoadedModule] = []
     for module_file in files:
-        module = parse(load(module_file))
+        module = schema.module.parse(load(module_file))
         modules.append(LoadedModule(path=module_file, module=module))
 
     return modules
 
 
 def load_local_module(f: str | bytes | IO[str] | IO[bytes], extension: str = None) -> LoadedModule:
-    module = parse(load(f, extension))
+    module = schema.module.parse(load(f, extension))
 
     if isinstance(f, (str, bytes)):
         filename = f.decode(encoding='utf-8') if isinstance(f, bytes) else f
@@ -80,7 +80,7 @@ def load_url_module(url: str) -> LoadedModule:
     except Exception:
         raise
 
-    module = parse(loads(content, extension))
+    module = schema.module.parse(loads(content, extension))
     return LoadedModule(path=url, module=module)
 
 
