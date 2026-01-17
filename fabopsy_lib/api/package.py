@@ -16,4 +16,3 @@ class Package(ABC):
     @abstractmethod
     def create(self, models: list[Model], attributes: dict[str, Any], device: Device) -> Instance:
         ...
-

@@ -19,3 +19,16 @@ class Instance(ABC):
         The report has some predefined system parameters, such as "time" which represents a Unix timestamp.
         """
         ...
+
+    def reset(self):
+        """
+        Reset the status after completing a segment of data processing,
+          to proceed with the next segment of data processing.
+        """
+        pass
+
+    def dispose(self):
+        """
+        It will be called when the instance is confirmed to be no longer in use, for timely resource release.
+        """
+        pass

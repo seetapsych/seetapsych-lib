@@ -8,15 +8,13 @@ __all__ = [
 
 class Model(ABC):
     @property
-    @abstractmethod
     def usage(self) -> str:
         """
         This model usage. Must be provided while using multi models instance.
         :return: Model usage. Should be same with module config file.
         """
-        ...
+        return ''
 
-    @property
     @abstractmethod
     def cache(self) -> str:
         """
