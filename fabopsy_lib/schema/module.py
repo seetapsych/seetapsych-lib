@@ -119,12 +119,13 @@ class ParameterType(str, Enum):
     NumberArray = 'number[]'
     StringArray = 'string[]'
     SelectionArray = 'selection[]'
+    Object = 'object'
 
 
 class Parameter(BaseModel):
     name: str
     type: ParameterType
-    value: None | int | float | str | list[int] | list[float] | list[str] = Field(None)
+    value: None | int | float | str | list[int] | list[float] | list[str] | dict[str, Any] = Field(None)
     selection: list[str] = Field(None)
     description: str = Field('')
 

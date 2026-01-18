@@ -175,10 +175,20 @@ class Pipeline(object):
     def _add_package(self, package: schema.Package | None) -> bool:
         if package is None:
             return False
-        if self._query_package(package.uid) is None:
-            self.__config.packages.append(package.model_copy())
-            return True
-        return False
+        if self._query_package(package.uid) is not None:
+            return False
+
+        provides = set(package.provides)
+
+        packages = self.__config.packages
+        insert_index = 0
+        while insert_index < len(packages):
+            if any((attr in provides for attr in packages[insert_index].requires)):
+                break
+            insert_index += 1
+
+        self.__config.packages.insert(insert_index, package.model_copy())
+        return True
 
     def _has_attribute(self, attribute: str) -> bool:
         return next((a for a in self.__config.attributes if a == attribute), None) is not None
