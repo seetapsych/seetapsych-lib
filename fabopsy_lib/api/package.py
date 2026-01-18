@@ -5,7 +5,7 @@ from typing import Any
 
 from .device import Device
 from .instance import Instance
-from .model import Model
+from .model import UsageModel
 
 __all__ = [
     'Package',
@@ -14,5 +14,5 @@ __all__ = [
 
 class Package(ABC):
     @abstractmethod
-    def create(self, models: list[Model], attributes: dict[str, Any], device: Device) -> Instance:
+    def create(self, models: list[UsageModel], parameters: dict[str, Any], device: Device | None) -> Instance:
         ...

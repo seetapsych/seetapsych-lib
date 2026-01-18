@@ -2,6 +2,7 @@
 
 import re
 import json
+import uuid
 from enum import Enum
 from typing import Any, Optional, Literal, Union
 
@@ -9,14 +10,26 @@ from pydantic.fields import FieldInfo
 from pydantic import BaseModel, Field
 
 __all__ = [
+    'Uid',
     'Entry',
     'Model',
     'Package',
     'Module',
+    'Parameter',
+    'ModuleSpec',
+    'CloudModel',
+    'DownloadModel',
 ]
 
 
+Uid = str
+
+
 class Entity(BaseModel):
+    uid: Uid = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description='Unique identifier. A unique string should be provided, or the UUID would to be filled.'
+    )
     name: str = Field('', description='')
     version: str = Field(
         '0.0.0',
@@ -38,12 +51,11 @@ class Entity(BaseModel):
 
 
 class Entry(BaseModel):
-    package: Optional[str] = Field(
+    package: str | None = Field(
         None,
         examples=['x.y.z'],
         description='The package where the method is called')
     method: str = Field(
-        ...,
         examples=['a.b.c.func'],
         description='Python method for this entry. '
                     'If a package is provided, '
@@ -54,17 +66,14 @@ class Entry(BaseModel):
 
 class CloudModel(BaseModel):
     host: str = Field(
-        ...,
         examples=['modelscope'],
         description='The cloud host to download model')
     model_id: str = Field(
-        ...,
         description='Model id for model hosting repo')
 
 
 class DownloadModel(BaseModel):
     url: str = Field(
-        ...,
         description='Download model link. HTTP recommended')
     md5: str = Field(
         '',
@@ -88,15 +97,15 @@ class Model(Entity):
 
     recommended: bool = Field(False, description='The recommended model will be used by default')
 
-    entry: Optional[Entry] = Field(
+    entry: Entry | None = Field(
         None,
         description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Model')
 
-    cloud: Optional[CloudModel] = Field(
+    cloud: CloudModel | None = Field(
         None,
         description='')
 
-    download: Optional[DownloadModel] = Field(
+    download: DownloadModel | None = Field(
         None,
         description='')
 
@@ -115,28 +124,26 @@ class ParameterType(str, Enum):
 class Parameter(BaseModel):
     name: str
     type: ParameterType
-    value: Union[None, int, float, str, list[int], list[float], list[str]] = Field(None)
+    value: None | int | float | str | list[int] | list[float] | list[str] = Field(None)
     selection: list[str] = Field(None)
     description: str = Field('')
 
 
 class Package(Entity):
-    using_models: list[str] = Field(
+    usage_models: list[str] = Field(
         [],
         description='If it is greater than 1, the corresponding usage model needs to be used for initialization')
     inputs: list[str] = Field([], description='Describe modal if this package need multimodal')
     requires: list[str] = Field([], description='Required attributes to run this package')
     provides: list[str] = Field([], description='Provided attributes to run this package')
     entry: Entry = Field(
-        ...,
         description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Package')
     parameters: list[Parameter] = Field([], description='Parameters for package controlling')
     models: list[Model] = Field(
-        ...,
         description='The available models can be switched according to the situation')
 
 
-class ModuleInfo(Entity):
+class ModuleSpec(Entity):
     requirements: list[str] = Field(
         [],
         description='Python requirements')
@@ -148,10 +155,10 @@ class Module(BaseModel):
         examples=['1.0'],
         description='Module configuration protocol version, which is different from the current module version')
 
-    module: ModuleInfo = Field(..., description="Module information")
+    module: ModuleSpec = Field(description="Module specification")
 
     packages: list[Package] = Field(
-        ...,
+        [],
         description='Packages that can be loaded')
 
 
