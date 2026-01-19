@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import copy
 import importlib
 import subprocess
 import ensurepip
@@ -121,7 +122,7 @@ def import_entry(entry: schema.Entry | None) -> Callable | None:
     return func
 
 
-def call_entry(entry: schema.Entry) -> Any:
+def call_entry(entry: schema.Entry, optional_kwargs: dict[str, Any] = None) -> Any:
     method = entry.method
     if entry.package:
         method = '.'.join([entry.package, method])
@@ -148,7 +149,12 @@ def call_entry(entry: schema.Entry) -> Any:
         raise RuntimeError(msg)
 
     args = entry.args or []
-    kwargs = entry.kwargs or {}
+    kwargs = copy.copy(entry.kwargs) if entry.kwargs else {}
+
+    if optional_kwargs:
+        for key in optional_kwargs.keys():
+            if key in kwargs:
+                kwargs[key] = optional_kwargs[key]
 
     try:
         return func(*args, **kwargs)

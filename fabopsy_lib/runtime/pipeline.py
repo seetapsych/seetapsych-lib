@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from fabopsy_lib import schema
 from fabopsy_lib.runtime.factory import Factory
-from fabopsy_lib.runtime.model import build_model
+from fabopsy_lib.runtime.model import build_model, exists_model
 from fabopsy_lib.utils.pencilbox import unique_list
 from fabopsy_lib.runtime.actions import unsatisfied_requirements, install_requirements, import_entry
 
@@ -65,13 +65,13 @@ class SolvedConfig(BaseModel):
 class UnsatisfactoryConfig(BaseModel):
     modules: list[schema.ModuleSpec] = Field(
         [], description='module requirement has not satisfied')
-    packages: list[schema.Package] = Field(
-        [], description='package entry has not satisfied')
+    entries: list[schema.Entry] = Field(
+        [], description='package/model entry is not callable')
     models: list[schema.Model] = Field(
-        [], description='model entry has not satisfied')
+        [], description='model did not exists in cache')
 
     def __bool__(self):
-        return bool(self.modules or self.packages or self.models)
+        return bool(self.modules or self.entries or self.models)
 
 
 InstallBackend = Literal['pip']
@@ -638,7 +638,7 @@ class Pipeline(object):
         solved.unsolved = unsolved if unsolved else None
         return solved if solved else None
 
-    def satisfied(self) -> tuple[bool, UnsatisfactoryConfig | None]:
+    def satisfied(self, *, cache_dir: str = None) -> tuple[bool, UnsatisfactoryConfig | None]:
         """
         To check whether the current pipeline is ready to start running, the following conditions will be checked:
             1. Whether the requirements of all modules have been met.
@@ -652,29 +652,33 @@ class Pipeline(object):
                 continue
             un_modules.append(module.model_copy(update={'requirements': un_requirements}))
 
-        un_packages: list[schema.Package] = []
+        un_entries: list[schema.Entry] = []
         for package in self.__config.packages:
             package_entry = import_entry(package.entry)
             if package_entry is None:
-                un_packages.append(package)
+                un_entries.append(package.entry)
 
         un_models: list[schema.Model] = []
         for models in self.__config.models.values():
             for model in models:
-                if model.entry is None:
-                    continue
-                model_entry = import_entry(model.entry)
-                if model_entry is None:
+                # check model entry
+                if model.entry is not None:
+                    model_entry = import_entry(model.entry)
+                    if model_entry is None:
+                        un_entries.append(model.entry)
+                        continue
+                # check model exists
+                if not exists_model(model, cache_dir=cache_dir):
                     un_models.append(model)
 
-        unsatisfied = un_modules or un_packages or un_models
+        unsatisfied = un_modules or un_entries or un_models
 
         if not unsatisfied:
             return True, None
 
         return False, UnsatisfactoryConfig(
             modules=un_modules,
-            packages=un_packages,
+            entries=un_entries,
             models=un_models,
         )
 
@@ -695,8 +699,8 @@ class Pipeline(object):
         """
         for models in self.__config.models.values():
             for model_config in models:
-                model = build_model(model_config)
-                model.cache(cache_dir=cache_dir)
+                model = build_model(model_config, cache_dir=cache_dir)
+                model.cache()
 
 
 def test():

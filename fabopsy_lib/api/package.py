@@ -14,5 +14,6 @@ __all__ = [
 
 class Package(ABC):
     @abstractmethod
-    def create(self, models: list[UsageModel], parameters: dict[str, Any], device: Device | None) -> Instance:
+    def create(self, *, models: list[UsageModel], parameters: dict[str, Any], device: Device | None,
+               **kwargs) -> Instance:
         ...

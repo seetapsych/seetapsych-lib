@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Optional, Literal, Union
 
 from pydantic.fields import FieldInfo
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 __all__ = [
     'Uid',
@@ -97,10 +97,6 @@ class Model(Entity):
 
     recommended: bool = Field(False, description='The recommended model will be used by default')
 
-    entry: Entry | None = Field(
-        None,
-        description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Model')
-
     cloud: CloudModel | None = Field(
         None,
         description='')
@@ -108,6 +104,16 @@ class Model(Entity):
     download: DownloadModel | None = Field(
         None,
         description='')
+
+    entry: Entry | None = Field(
+        None,
+        description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Model')
+
+    @model_validator(mode='after')
+    def check_not_all_none(self):
+        if all(x is None for x in [self.cloud, self.download, self.entry]):
+            raise ValueError("cloud, download and entry can not all be None")
+        return self
 
 
 class ParameterType(str, Enum):

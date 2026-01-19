@@ -29,10 +29,14 @@ class MissingInputModal(Exception):
 
 class Runner(object):
     def __init__(self, pipeline: Pipeline, device: api.Device = None, *, cache_dir: str = None):
+        self.__start_frame_tick = 1
+
         self.__device = device
+        self.__cache_dir = cache_dir
         self.__pipeline = pipeline.config.model_copy(deep=True)
         self.__instances: list[api.Instance] = []
         self.__inputs = pipeline.inputs
+        self.__frame_tick = self.__start_frame_tick
 
         # is pipeline no problem and satisfied?
         problem = pipeline.problem()
@@ -53,7 +57,7 @@ class Runner(object):
 
             models: list[api.UsageModel] = []
             for model_config in config_models:
-                models.append(build_model(model_config))
+                models.append(build_model(model_config, cache_dir=cache_dir))
 
             parameters: dict[str, Any] = {}
             for param in package.parameters:
@@ -63,7 +67,7 @@ class Runner(object):
 
             # central cache models
             for model in models:
-                model.cache(cache_dir=cache_dir)
+                model.cache()
 
             instance = loaded_package.create(models=models, parameters=parameters, device=device)
             self.__instances.append(instance)
@@ -89,20 +93,28 @@ class Runner(object):
             raise MissingInputModal(missing_modals)
 
         reports = []
+        updates = []
         report = {
             'time': timestamp,
+            'frame_tick': self.__frame_tick,
         }
 
-        # inference each
+        # inference each instance
         for instance in self.__instances:
-            update = instance.inference(data, report)
+            update = instance.inference(data=data, report=report)
+
             if update:
                 report.update(update)
+
+            updates.append(copy.deepcopy(update))
             reports.append(copy.deepcopy(report))
+
+        self.__frame_tick += 1
 
         return report
 
     def reset(self):
+        self.__frame_tick = self.__start_frame_tick
         for instance in self.__instances:
             instance.reset()
 

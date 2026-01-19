@@ -7,14 +7,26 @@ __all__ = [
     'UsageModel',
 ]
 
+
 class Model(ABC):
     @abstractmethod
-    def cache(self, cache_dir: str | None = None) -> str:
+    def exists(self) -> bool:
         """
-        Cache model from host or use directly local file path
+        Check whether the model already exists.
         :return:
         """
         ...
+
+    @abstractmethod
+    def cache(self) -> str:
+        """
+        Cache model from host or use directly local file path.
+        If `self.exists` returns true, the cached path should be directly returned without extra download.
+        The consistency of cache state detection should be ensured by the implementation.
+        :return:
+        """
+        ...
+
 
 class UsageModel(Model, ABC):
     @property

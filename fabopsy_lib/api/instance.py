@@ -10,7 +10,7 @@ __all__ = [
 
 class Instance(ABC):
     @abstractmethod
-    def inference(self, data: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
+    def inference(self, *, data: dict[str, Any], report: dict[str, Any], **kwargs) -> dict[str, Any]:
         """
         Call a frame of data.
         :param data: dict[str, numpy.ndarray]
