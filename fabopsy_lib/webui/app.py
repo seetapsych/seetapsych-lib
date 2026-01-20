@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
+
 import json
-import os.path
 import sys
 import tempfile
 import time
 import argparse
 import uuid
+import os.path
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -57,7 +58,7 @@ def page_start():
                         st.badge(attr)
                 st.write(package.description)
                 with st.container(horizontal=True):
-                    if st.button('Select'):
+                    if st.button('Select', key=f'select:{package.uid}'):
                         pipeline.add_packages(package.uid)
                         st.rerun()
 
@@ -91,7 +92,7 @@ def page_start():
                 for p in problem.missing_model_packages:
                     st.error(f'Missing model for "{p.name}" where usage = {p.usage_models}', icon='❌')
                 for p in problem.attributes:
-                    st.error(f'Missing required attribute "{p}"')
+                    st.error(f'Missing required attribute "{p}"', icon='❌')
 
         busy = st.empty()
 
@@ -150,7 +151,7 @@ def page_setting():
                     else:
                         st.markdown(f"- {model.name}` v{model.version}`")
                 with st.container(horizontal=True):
-                    if st.button('Edit'):
+                    if st.button('Edit', key=f'edit:{package.uid}'):
                         st.session_state['package_uid'] = package.uid
                         st.rerun()
 
@@ -246,7 +247,7 @@ def page_install():
                 suffix = '.' + m.method if m.package else m.method
                 st.error(f'Entry `{prefix}{suffix}` is not callable.', icon='❌')
             for m in unsatisfaction.models:
-                st.error(f'Missing cache **{m.name}** `v{m.version}`.')
+                st.error(f'Missing cache **{m.name or "<anonymous>"}** `v{m.version}`.', icon='❌')
 
         busy = st.empty()
 
