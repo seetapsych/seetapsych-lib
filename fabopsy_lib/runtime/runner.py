@@ -43,9 +43,9 @@ class Runner(object):
         if problem:
             raise PipelineHasProblem(problem)
 
-        satisfied, unsatisfactory = pipeline.satisfied()
+        satisfied, unsatisfaction = pipeline.satisfied()
         if not satisfied:
-            raise PipelineUnsatisfied(unsatisfactory)
+            raise PipelineUnsatisfied(unsatisfaction)
 
         # build pipeline instance
         for package in pipeline.config.packages:

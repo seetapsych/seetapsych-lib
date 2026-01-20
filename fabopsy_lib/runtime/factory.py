@@ -26,10 +26,10 @@ class Factory(object):
 
         self.__attribute_providers: dict[str, list[schema.Package]] = {}
 
-        # load builtin modules by default.
-        self.extend(load_builtin_modules())
-
     def append(self, module: LoadedModule):
+        # TODO: check module has already exists or not
+        self.__modules.append(module)
+
         self.__module_uid_map[module.module.module.uid] = module.module
         for package in module.module.packages:
             self.__package_uid_map[package.uid] = package
@@ -50,10 +50,11 @@ class Factory(object):
         for module in modules:
             self.append(module)
 
+    def load_builtin_modules(self):
+        self.extend(load_builtin_modules())
+
     def load_dir_modules(self, root: str):
-        modules = load_dir_modules(root)
-        for module in modules:
-            self.append(module)
+        self.extend(load_dir_modules(root))
 
     def load_local_module(self, f: str | bytes | IO[str] | IO[bytes], extension: str = None):
         module = load_local_module(f, extension)

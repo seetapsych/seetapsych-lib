@@ -13,6 +13,11 @@ from fabopsy_lib.runtime.actions import unsatisfied_requirements, install_requir
 
 __all__ = [
     'Pipeline',
+    'PipelineConfig',
+    'InvalidConfig',
+    'ProblemConfig',
+    'SolvedConfig',
+    'UnsatisfactionConfig',
 ]
 
 class PipelineConfig(BaseModel):
@@ -62,7 +67,7 @@ class SolvedConfig(BaseModel):
         return bool(self.add_modules or self.add_packages or self.add_attributes or self.add_models or self.unsolved)
 
 
-class UnsatisfactoryConfig(BaseModel):
+class UnsatisfactionConfig(BaseModel):
     modules: list[schema.ModuleSpec] = Field(
         [], description='module requirement has not satisfied')
     entries: list[schema.Entry] = Field(
@@ -372,6 +377,19 @@ class Pipeline(object):
 
         return unique_list(requirements)
 
+    def get_models(self, package_uid: schema.Uid) -> list[schema.Model]:
+        return self.__config.models.get(package_uid, [])
+
+    def get_parameters(self, package_uid: schema.Uid) -> list[schema.Parameter]:
+        return self.__config.parameters.get(package_uid, [])
+
+    def get_parameter(self, package_uid: schema.Uid, name: str) -> schema.Parameter | None:
+        parameters = self.get_parameters(package_uid)
+        for p in parameters:
+            if p.name == name:
+                return p
+        return None
+
     def validate(self, *, update: bool = False) -> InvalidConfig | None:
         """
         Validate pipeline with factory modules, include:
@@ -594,7 +612,6 @@ class Pipeline(object):
                 unsolved.missing_model_packages.append(package)
                 continue
 
-            # TODO: use recommended model by default
             package_models: list[schema.Model] = factory_package.models
             package_recommended_models: list[schema.Model] = []
 
@@ -638,7 +655,7 @@ class Pipeline(object):
         solved.unsolved = unsolved if unsolved else None
         return solved if solved else None
 
-    def satisfied(self, *, cache_dir: str = None) -> tuple[bool, UnsatisfactoryConfig | None]:
+    def satisfied(self, *, cache_dir: str = None) -> tuple[bool, UnsatisfactionConfig | None]:
         """
         To check whether the current pipeline is ready to start running, the following conditions will be checked:
             1. Whether the requirements of all modules have been met.
@@ -676,7 +693,7 @@ class Pipeline(object):
         if not unsatisfied:
             return True, None
 
-        return False, UnsatisfactoryConfig(
+        return False, UnsatisfactionConfig(
             modules=un_modules,
             entries=un_entries,
             models=un_models,
@@ -699,6 +716,7 @@ class Pipeline(object):
         """
         for models in self.__config.models.values():
             for model_config in models:
+                # TODO: each cache dir should be different in cache_dir, not at root
                 model = build_model(model_config, cache_dir=cache_dir)
                 model.cache()
 
