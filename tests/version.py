@@ -17,11 +17,11 @@ def main() -> Optional[int]:
         project = tomli.load(f)
 
     project_version = project['project']['version']
-    library_version = fabopsy_lib.___version___
+    library_version = fabopsy_lib.__version__
 
     if project_version != library_version:
         logger.warning(f"project and library version mismatch:\n"
-                       f"\tfabopsy_lib.___version___ = '{library_version}'\n"
+                       f"\tfabopsy_lib.__version__ = '{library_version}'\n"
                        f"\tpyproject.toml > project > version = '{project_version}'")
         print(library_version)
         return 1

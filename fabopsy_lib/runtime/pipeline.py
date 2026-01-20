@@ -716,7 +716,6 @@ class Pipeline(object):
         """
         for models in self.__config.models.values():
             for model_config in models:
-                # TODO: each cache dir should be different in cache_dir, not at root
                 model = build_model(model_config, cache_dir=cache_dir)
                 model.cache()
 
