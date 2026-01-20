@@ -10,5 +10,16 @@ dependencies = [
     "tomli>=2.3.0",
 ]
 
-[tool.setuptools]
-package-data = { "fabopsy_lib" = ["modules/*.json", "modules/*.toml", "modules/*.yaml"] }
+[tool.setuptools.package-data]
+fabopsy_lib = [
+    "modules/*.json",
+    "modules/*.toml",
+    "modules/*.yaml",
+    "modules/*.yml"
+]
+
+[dependency-groups]
+dev = [
+    "opencv-python>=4.13.0.90",
+    "streamlit>=1.53.0",
+]

@@ -1,0 +1,39 @@
+version = "1.0"
+
+[module]
+name = "Example Module"
+version = "0.0.1"
+description = "This is an example module"
+keywords = ["Example", "Module"]
+requirements = ['cowsay']
+
+[[packages]]
+name = "Example Package"
+version = "0.0.1"
+description = "This is an example package. Use to build pipeline to run."
+keywords = ["Example", "Package"]
+
+usage_models = []
+inputs = []
+provides = ["example/output"]
+requires = []
+
+[packages.entry]
+method = "fabopsy_lib.example.example.load_package"
+
+[[packages.parameters]]
+name = "min_face"
+type = "integer"
+value = 80
+description = 'Min face to detect'
+
+[[packages.models]]
+name = "Example Model"
+version = "0.0.1"
+description = "This is an example model. Unable to download and cannot be persistent cached."
+keywords = ["Example", "Model"]
+usage = ""
+recommended = true
+
+[packages.models.entry]
+method = "fabopsy_lib.example.example.load_model"
