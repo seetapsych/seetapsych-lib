@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import json
-import sys
-import tempfile
-import time
-import argparse
 import uuid
+import argparse
+import tempfile
 import os.path
-from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import cast, Any, Protocol
 
 import numpy
 import cv2
@@ -499,8 +496,7 @@ global_style = """
 """
 
 
-@dataclass
-class Args:
+class Args(Protocol):
     dirs: list[str]
     files: list[str]
     urls: list[str]
@@ -562,7 +558,7 @@ def initialize(args: Args):
         st.session_state['runner'] = None
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> Args:
     parser = argparse.ArgumentParser(description='Fabopsy WebUI via Streamlit.')
 
     parser.add_argument(
@@ -609,13 +605,11 @@ def parse_args() -> argparse.Namespace:
         help='Directory to store uploaded files (default: upload subdirectory in current working directory)'
     )
 
-    return parser.parse_args()
+    return cast(Args, cast(object, parser.parse_args()))
+
 
 def main():
-    # parse sys.argv
-    args: Args | argparse.Namespace = parse_args()
-
-    initialize(args)
+    initialize(parse_args())
 
     pages = {
         'start': page_start,

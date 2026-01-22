@@ -27,7 +27,8 @@ class Factory(object):
         self.__attribute_providers: dict[str, list[schema.Package]] = {}
 
     def append(self, module: LoadedModule):
-        # TODO: check module has already exists or not
+        # Even if there are duplicate UIDs, in most cases, factory operations will still work without issues.
+        # TODO: We still need to handle this situation or provide a prompt to the user, in the future.
         self.__modules.append(module)
 
         self.__module_uid_map[module.module.module.uid] = module.module
