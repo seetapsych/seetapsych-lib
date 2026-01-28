@@ -647,7 +647,7 @@ def initialize(args: Args):
     st.set_page_config(
         layout="wide",
         page_title="Fabopsy WebUI",
-        page_icon="😎"
+        page_icon="🕯️"
     )
     st.markdown(f'<style>{global_style}</style>', unsafe_allow_html=True)
 
