@@ -16,6 +16,7 @@ __all__ = [
     'Module',
     'Entity',
     'Package',
+    'ParameterType',
     'Parameter',
     'ModuleSpec',
     'CloudModel',

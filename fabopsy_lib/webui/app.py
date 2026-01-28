@@ -5,7 +5,7 @@ import uuid
 import argparse
 import tempfile
 import os.path
-from typing import cast, Any, Protocol
+from typing import cast, Any, Protocol, TypeVar
 
 import numpy
 import cv2
@@ -112,11 +112,148 @@ def page_start():
             st.rerun()
 
 
+def parameter_integer(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    value = st.number_input(key=key, label=param.name, value=param.value, step=1)
+    if value != param.value:
+        update = {param.name: int(value)}
+        pipeline.set_parameters(package_uid, update)
+
+
+def parameter_number(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    value = st.number_input(key=key, label=param.name, value=param.value, format='%f', step=1e-9)
+    if value != param.value:
+        update = {param.name: float(value)}
+        pipeline.set_parameters(package_uid, update)
+
+
+def parameter_string(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    value = st.text_input(key=key, label=param.name, value=param.value)
+    if value != param.value:
+        update = {param.name: str(value)}
+        pipeline.set_parameters(package_uid, update)
+
+
+def parameter_selection(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    index: int | None = param.selection.index(param.value)
+    if index < 0:
+        index = None
+    value = st.selectbox(key=key, label=param.name, options=param.selection, index=index)
+    if value is not None and value != param.value:
+        update = {param.name: str(value)}
+        pipeline.set_parameters(package_uid, update)
+
+
+T = TypeVar('T')
+def format_array(t: type[T],  value: list[T]) -> str:
+    return ', '.join(map(str, value))
+
+
+def parse_array(t: type[T], value: str) -> list[T] | None:
+    try:
+        return [t(v.strip()) for v in value.split(',') if v]
+    except Exception:
+        return None
+
+
+def parameter_integer_array(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    format_value = format_array(int, param.value)
+    value = st.text_input(key=key, label=param.name, value=format_value)
+    if value is not None and value != format_value:
+        parse_value = parse_array(int, value)
+        if parse_value is not None:
+            update = {param.name: parse_value}
+            pipeline.set_parameters(package_uid, update)
+        else:
+            st.error(f'Invalid {param.name}: {value}')
+
+
+def parameter_number_array(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    format_value = format_array(float, param.value)
+    value = st.text_input(key=key, label=param.name, value=format_value)
+    if value is not None and value != format_value:
+        parse_value = parse_array(float, value)
+        if parse_value is not None:
+            update = {param.name: parse_value}
+            pipeline.set_parameters(package_uid, update)
+        else:
+            st.error(f'Invalid {param.name}: {value}')
+
+
+def parameter_string_array(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    format_value = format_array(str, param.value)
+    value = st.text_input(key=key, label=param.name, value=format_value)
+    if value is not None and value != format_value:
+        parse_value = parse_array(str, value)
+        if parse_value is not None:
+            update = {param.name: parse_value}
+            pipeline.set_parameters(package_uid, update)
+        else:
+            st.error(f'Invalid {param.name}: {value}')
+
+
+def parameter_selection_array(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    value = st.multiselect(key=key, label=param.name, options=param.selection, default=param.value)
+    if value is not None and value != param.value:
+        update = {param.name: value}
+        pipeline.set_parameters(package_uid, update)
+
+
+def format_object_string(value: str) -> str:
+    value = value or '{}'
+    try:
+        return json.dumps(json.loads(value), indent=2, ensure_ascii=False)
+    except Exception:
+        return '{}'
+
+
+def parse_object_string(value: str) -> str | None:
+    try:
+        return json.dumps(json.loads(value), ensure_ascii=False)
+    except Exception:
+        return None
+
+
+def parameter_object(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    format_value = format_object_string(param.value)
+    value = st.text_area(key=key, label=param.name, value=format_value)
+    if value is not None and value != format_value:
+        parse_value = parse_object_string(value)
+        if parse_value is not None:
+            update = {param.name: parse_value}
+            pipeline.set_parameters(package_uid, update)
+        else:
+            st.error(f'Invalid {param.name}: {value}')
+
+
 def component_parameter(package_uid: str, param: schema.Parameter):
-    # TODO: support parameter edit
+    pipeline: Pipeline = st.session_state['pipeline']
+    parameter_generators = {
+        schema.ParameterType.Integer: parameter_integer,
+        schema.ParameterType.Number: parameter_number,
+        schema.ParameterType.String: parameter_string,
+        schema.ParameterType.Selection: parameter_selection,
+        schema.ParameterType.IntegerArray: parameter_integer_array,
+        schema.ParameterType.NumberArray: parameter_number_array,
+        schema.ParameterType.StringArray: parameter_string_array,
+        schema.ParameterType.SelectionArray: parameter_selection_array,
+        schema.ParameterType.Object: parameter_object,
+    }
     with st.container():
         st.markdown(f'> {param.description}')
-        st.text_input(label=param.name, value=param.value, key=package_uid + ':' + param.name, disabled=True)
+        generator = parameter_generators.get(param.type, None)
+        if generator is not None:
+            generator(pipeline, package_uid, param)
+        else:
+            st.markdown(f'**{param.name}**: {param.value}')
 
 
 def page_setting():

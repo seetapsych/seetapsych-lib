@@ -4,9 +4,8 @@ import glob
 import os.path
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from typing import IO, Optional
-
-from pydantic import BaseModel
 
 from fabopsy_lib import schema
 from fabopsy_lib.utils.loader import load, loads
@@ -22,8 +21,9 @@ __all__ = [
 ]
 
 
-class LoadedModule(BaseModel):
-    source: str               # the origin config path
+@dataclass
+class LoadedModule:
+    source: str             # the origin config path
     module: schema.Module   # loaded module
 
 
@@ -39,8 +39,9 @@ def load_dir_modules(root: str) -> list[LoadedModule]:
 
     files: list[str] = []
     for ext in extensions:
-        pattern = os.path.join(root, '**', f'*.{ext}')
-        files.extend(glob.glob(pattern, recursive=True))
+        pattern = os.path.join('**', f'*.{ext}')
+        ext_files = glob.glob(pattern, root_dir=root, recursive=True)
+        files.extend([os.path.join(root, name) for name in ext_files])
 
     files = sorted(files)
 
