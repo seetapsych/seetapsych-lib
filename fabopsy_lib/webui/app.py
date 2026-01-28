@@ -206,27 +206,27 @@ def parameter_selection_array(pipeline: Pipeline, package_uid: str, param: schem
         pipeline.set_parameters(package_uid, update)
 
 
-def format_object_string(value: str) -> str:
-    value = value or '{}'
+def format_object(value: dict[str, Any]) -> str:
+    value = value or {}
     try:
-        return json.dumps(json.loads(value), indent=2, ensure_ascii=False)
+        return json.dumps(value, indent=2, ensure_ascii=False)
     except Exception:
         return '{}'
 
 
-def parse_object_string(value: str) -> str | None:
+def parse_object(value: str) -> dict[str, Any] | None:
     try:
-        return json.dumps(json.loads(value), ensure_ascii=False)
+        return json.loads(value)
     except Exception:
         return None
 
 
 def parameter_object(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
-    format_value = format_object_string(param.value)
+    format_value = format_object(param.value)
     value = st.text_area(key=key, label=param.name, value=format_value)
     if value is not None and value != format_value:
-        parse_value = parse_object_string(value)
+        parse_value = parse_object(value)
         if parse_value is not None:
             update = {param.name: parse_value}
             pipeline.set_parameters(package_uid, update)

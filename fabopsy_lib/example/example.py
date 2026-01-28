@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+
+import json
 import time
 from typing import Any
 
@@ -15,6 +17,8 @@ class ExampleInstance(api.Instance):
         self.__device = device
 
     def inference(self, *, data: dict[str, Any], report: dict[str, Any], **kwargs) -> dict[str, Any]:
+        print(f'Data: {data}')
+
         time.sleep(0.01)
 
         default_input = data['default']
@@ -37,6 +41,9 @@ class Package(api.Package):
 
         if device is None:
             device = api.Device('cpu')
+
+        json_parameters = json.dumps(parameters, indent=2, ensure_ascii=False)
+        print(f'Parameters: {json_parameters}')
 
         model_path = models[0].cache()
         return ExampleInstance(model_path, device)

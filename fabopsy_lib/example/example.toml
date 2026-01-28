@@ -74,7 +74,7 @@ description = 'Select multi selection'
 [[packages.parameters]]
 name = "object"
 type = "object"
-value = '{}'
+value = {}
 description = 'Edit object'
 
 [[packages.models]]

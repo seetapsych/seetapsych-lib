@@ -133,9 +133,10 @@ class ParameterType(str, Enum):
 class Parameter(BaseModel):
     name: str
     type: ParameterType
+    description: str = Field('')
+
     value: None | int | float | str | list[int] | list[float] | list[str] | dict[str, Any] = Field(None)
     selection: list[str] = Field(None)
-    description: str = Field('')
 
 
 class Package(Entity):
