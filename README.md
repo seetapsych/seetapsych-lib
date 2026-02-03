@@ -24,3 +24,14 @@ pip install -e .[dev]
 ```
 
 If you are managing the project with uv, you can replace pip with uv pip: `uv pip install .`.
+
+## Configure
+
+### Environment
+
+The following environment variables can be used for:
+
+| Env               | Description                                                                      |
+|:------------------|:---------------------------------------------------------------------------------|
+| FABOPSY_LOG_LEVEL | Change default log level.<br/>Could be WARNING, INFO, DEBUG or an integer value. |
+| FABOPSY_CACHE_DIR | Change default cache dir.                                                        |

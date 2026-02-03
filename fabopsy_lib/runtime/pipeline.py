@@ -564,11 +564,13 @@ class Pipeline(object):
                         problem_models.append(usage)
 
             if problem_models:
-                logger.debug(f'Found package [{package.name}]({package.uid}) mising models: {problem_models}')
+                log_models = ', '.join(problem_models)
+                logger.debug(f'Found package [{package.name}]({package.uid}) mising models: {log_models}')
                 missing_model_packages.append(package.model_copy(update={'usage_models': problem_models}))
 
         if problem_attributes:
-            logger.debug(f'Found not provided attributes {problem_attributes}')
+            log_attributes = ', '.join(problem_attributes)
+            logger.debug(f'Found not provided attributes {log_attributes}')
 
         has_problem = missing_module_packages or missing_model_packages or problem_attributes
 
@@ -717,7 +719,8 @@ class Pipeline(object):
             un_requirements = unsatisfied_requirements(module)
             if not un_requirements:
                 continue
-            logger.debug(f'Unsatisfied module [{module.name}]({module.uid}) requirements: {un_requirements}')
+            log_requirements = ' '.join(un_requirements)
+            logger.debug(f'Unsatisfied module [{module.name}]({module.uid}) requirements: {log_requirements}')
             un_modules.append(module.model_copy(update={'requirements': un_requirements}))
 
         un_entries: list[schema.Entry] = []
@@ -766,8 +769,8 @@ class Pipeline(object):
         :return:
         """
         for module in self.__config.modules:
-            requirements = ' '.join(module.requirements)
-            logger.info(f'Install requirements of module [{module.name}]({module.uid}): {requirements}')
+            log_requirements = ' '.join(module.requirements)
+            logger.info(f'Install requirements of module [{module.name}]({module.uid}): {log_requirements}')
             install_requirements(module)
 
     def cache_models(self, *, cache_dir: str = None):
