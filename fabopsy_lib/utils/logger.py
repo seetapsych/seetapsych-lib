@@ -17,7 +17,7 @@ formatter = logging.Formatter(
 )
 
 console_handler = logging.StreamHandler()
-console_handler.setLevel(level)
+console_handler.setLevel(logging.NOTSET)
 console_handler.setFormatter(formatter)
 
 logger.addHandler(console_handler)
