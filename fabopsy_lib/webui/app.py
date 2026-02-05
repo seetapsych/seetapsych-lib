@@ -14,6 +14,7 @@ from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 from fabopsy_lib.runtime import Factory, Pipeline, Runner
 from fabopsy_lib.runtime.pipeline import UnsatisfactionConfig
+from fabopsy_lib.runtime.export import list2csv
 from fabopsy_lib import schema
 
 
@@ -434,18 +435,58 @@ def page_install():
 
 
 def run_image(runner: Runner, file: UploadedFile):
-    with st.spinner('Open image...', show_time=True):
-        image_bytes = file.read()
-        image = cv2.imdecode(numpy.frombuffer(image_bytes, numpy.uint8), cv2.IMREAD_COLOR)
+    reports = st.session_state.get('reports', [])
 
-    with st.spinner('Running...', show_time=True):
-        try:
-            report = runner.run({
-                'default': image,
-            })
-            st.code(json.dumps(report, indent=2), language='json')
-        except Exception as e:
-            st.session_state['error'] = e
+    if not reports:
+        with st.spinner('Open image...', show_time=True):
+            image_bytes = file.read()
+            image = cv2.imdecode(numpy.frombuffer(image_bytes, numpy.uint8), cv2.IMREAD_COLOR)
+
+        with st.spinner('Running...', show_time=True):
+            try:
+                report = runner.run({
+                    'default': image,
+                })
+            except Exception as e:
+                st.session_state['error'] = e
+                st.rerun()
+
+        st.session_state['reports'] = [report]
+    else:
+        report = reports
+
+    def to_json() -> str:
+        content = st.session_state.get('export_json', '')
+        if not content:
+            content = json.dumps(report, ensure_ascii=False, indent=2)
+            st.session_state['export_json'] = content
+        return content
+
+    def to_csv() -> str:
+        content = st.session_state.get('export_csv', '')
+        if not content:
+            content = list2csv([report])
+            st.session_state['export_csv'] = content
+        return content
+
+    with st.container(horizontal=True):
+        st.download_button(
+            label='Download JSON',
+            data=to_json(),
+            file_name='report.json',
+            mime='text/json',
+            key='download_json',
+        )
+
+        st.download_button(
+            label='Download CSV',
+            data=to_csv(),
+            file_name='report.csv',
+            mime='text/csv',
+            key='download_csv',
+        )
+
+    st.code(json.dumps(report, indent=2), language='json')
 
 
 class CacheFile(object):
@@ -505,36 +546,72 @@ class ReleaseCapture(object):
 
 def run_video(runner: Runner, file: UploadedFile):
     upload_dir = st.session_state['upload_dir']
+    reports = st.session_state.get('reports', [])
 
-    with CacheFile(file, temp_dir=upload_dir) as temp:
-        with st.spinner('Save video...', show_time=True):
-            temp.save()
+    if not reports:
+        with CacheFile(file, temp_dir=upload_dir) as temp:
+            with st.spinner('Save video...', show_time=True):
+                temp.save()
 
-        with st.spinner('Process video...', show_time=True), ReleaseCapture(temp.path) as capture:
-            progress = st.progress(0)
-            n = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-            i = 0
+            with st.spinner('Process video...', show_time=True), ReleaseCapture(temp.path) as capture:
+                progress = st.progress(0)
+                n = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+                i = 0
 
-            reports = []
-            while capture.isOpened():
-                ok = capture.grab()
-                if not ok:
-                    break
-                ok, image = capture.retrieve()
-                if not ok:
-                    break
-                image: numpy.ndarray
-                i += 1
-                try:
-                    report = runner.run({
-                        'default': image,
-                    })
-                    reports.append(report)
-                except Exception as e:
-                    st.session_state['error'] = e
-                progress.progress(i / n, text=f'[{i}/{n}]')
+                reports = []
+                while capture.isOpened():
+                    ok = capture.grab()
+                    if not ok:
+                        break
+                    ok, image = capture.retrieve()
+                    if not ok:
+                        break
+                    image: numpy.ndarray
+                    i += 1
+                    try:
+                        report = runner.run({
+                            'default': image,
+                        }, timestamp=capture.get(cv2.CAP_PROP_POS_MSEC) / 1000)
+                        reports.append(report)
+                    except Exception as e:
+                        st.session_state['error'] = e
+                        st.rerun()
+                    progress.progress(i / n, text=f'[{i}/{n}]')
 
-            st.code(json.dumps(reports, indent=2), language='json')
+        st.session_state['reports'] = reports
+
+    def to_json() -> str:
+        content = st.session_state.get('export_json', '')
+        if not content:
+            content = json.dumps(reports, ensure_ascii=False, indent=2)
+            st.session_state['export_json'] = content
+        return content
+
+    def to_csv() -> str:
+        content = st.session_state.get('export_csv', '')
+        if not content:
+            content = list2csv(reports)
+            st.session_state['export_csv'] = content
+        return content
+
+    with st.container(horizontal=True):
+        st.download_button(
+            label='Download JSON',
+            data=to_json(),
+            file_name='report.json',
+            mime='text/json',
+            key='download_json',
+        )
+
+        st.download_button(
+            label='Download CSV',
+            data=to_csv(),
+            file_name='report.csv',
+            mime='text/csv',
+            key='download_csv',
+        )
+
+    st.code(json.dumps(reports, indent=2), language='json')
 
 
 def page_run():
@@ -557,12 +634,19 @@ def page_run():
             type=['jpg', 'png', 'bmp', 'wav', 'mp4', 'avi', 'wmv'],
         )
         if file is not None:
+            if st.session_state.get('file', None) != file.file_id:
+               st.session_state['reports'] = []
+               st.session_state['export_json'] = ''
+               st.session_state['export_csv'] = ''
+
             if file.type.startswith('image/'):
                 st.image(file)
                 run_image(runner, file)
             elif file.type.startswith('video/'):
                 st.video(file)
                 run_video(runner, file)
+
+            st.session_state['file'] = file.file_id
 
     if event == 'build':
         with busy.spinner('Building...', show_time=True):
