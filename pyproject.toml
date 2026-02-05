@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "pyyaml>=6.0.3",
     "tomli>=2.3.0",
+    "tqdm>=4.67.2",
 ]
 
 [tool.setuptools.package-data]

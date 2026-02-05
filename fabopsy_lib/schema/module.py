@@ -75,12 +75,14 @@ class CloudModel(BaseModel):
 
 
 class DownloadModel(BaseModel):
+    index: str = Field(
+        description='Download output filename as index for model cache, which will used for exists check.')
     url: str = Field(
         description='Download model link. HTTP recommended')
     md5: str = Field(
         '',
-        description='Model file md5')
-    compressed: bool = Field(
+        description='Download model file md5')
+    unpack: bool = Field(
         False,
         description='Is the downloaded file a compressed file? If so, the file will be automatically decompressed.')
 

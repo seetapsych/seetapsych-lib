@@ -7,6 +7,8 @@ from fabopsy_lib import api
 from fabopsy_lib import schema
 from fabopsy_lib.runtime.actions import call_entry
 from fabopsy_lib.utils.dirs import appdirs
+from fabopsy_lib.utils.download_file import download_file, extract_file
+from fabopsy_lib.utils.defer import defer
 
 __all__ = [
     'build_model',
@@ -94,10 +96,28 @@ class DownloadModel(api.UsageModel):
         return self.__usage
 
     def exists(self) -> bool:
-        return False
+        cache_index = os.path.join(self.__cache_dir, self.__cfg.index)
+        return os.path.exists(cache_index)
 
     def cache(self) -> str:
-        raise NotImplementedError
+        cache_index = os.path.join(self.__cache_dir, self.__cfg.index)
+        if os.path.exists(cache_index):
+            return cache_index
+
+        os.makedirs(self.__cache_dir, exist_ok=True)
+        if self.__cfg.unpack:
+            # download compressed file and upack it
+            compressed_file = download_file(self.__cfg.url, self.__cache_dir, md5=self.__cfg.md5)
+            with defer(lambda: os.remove(compressed_file)):
+                extract_file(compressed_file, self.__cache_dir)
+        else:
+            # download to index file
+            download_file(self.__cfg.url, cache_index, md5=self.__cfg.md5)
+
+        assert os.path.exists(cache_index), (
+            RuntimeError(f'Index was not found in download directory: {self.__cfg.index}'))
+
+        return cache_index
 
 
 def build_model_with_cloud(
@@ -141,7 +161,27 @@ def exists_model(model: schema.Model, *, cache_dir: str = None) -> bool:
 
 
 def test():
-    pass
+    cache_dir = 'cache'
+
+    download_model = DownloadModel(schema.DownloadModel(
+        index='LICENSE',
+        url='https://raw.githubusercontent.com/python/cpython/3.11/LICENSE',
+        md5='fcf6b249c2641540219a727f35d8d2c2',
+        **{}),
+        cache_dir=cache_dir
+    )
+
+    print(download_model.exists(), download_model.cache())
+
+    download_model = DownloadModel(schema.DownloadModel(
+        index='font-consolas-ttf-1.2/fonts/Consolas.ttf',
+        url='https://codeload.github.com/misuchiru03/font-consolas-ttf/zip/refs/tags/1.2',
+        md5='999642B83F40AFE277C40EF8A4CB653E',
+        unpack=True),
+        cache_dir=cache_dir
+    )
+
+    print(download_model.exists(), download_model.cache())
 
 
 if __name__ == '__main__':

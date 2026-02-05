@@ -782,6 +782,7 @@ class Pipeline(object):
         for models in self.__config.models.values():
             for model_config in models:
                 logger.info(f'Cache model [{model_config.name}]({model_config.uid})')
+                # Exceptions may be thrown by build model and cache, which are not handled in the current version
                 model = build_model(model_config, cache_dir=cache_dir)
                 model.cache()
 
