@@ -5,6 +5,7 @@ import uuid
 import argparse
 import tempfile
 import os.path
+from dataclasses import dataclass, fields, field
 from typing import cast, Any, Protocol, TypeVar
 
 import numpy
@@ -16,6 +17,45 @@ from fabopsy_lib.runtime import Factory, Pipeline, Runner
 from fabopsy_lib.runtime.pipeline import UnsatisfactionConfig
 from fabopsy_lib.runtime.export import list2csv
 from fabopsy_lib import schema
+from fabopsy_lib.utils.logger import set_level as set_logger_level
+
+
+@dataclass
+class SessionState(object):
+    log: str | None = None
+
+    page: str = 'start'
+
+    cache_dir: str = ''
+    upload_dir: str = ''
+
+    factory: Factory | None = None
+    pipeline: Pipeline | None = None
+    runner: Runner | None = None
+
+    event: str = ''
+    error: BaseException | str | None = None
+
+    search_package: str = ''
+    package_uid: str = ''
+    satisfied: bool = False
+    unsatisfaction: UnsatisfactionConfig | None = False
+
+    file: Any = None
+    reports: list[dict[str, Any]] = field(default_factory=lambda:[])
+    export_json: str = ''
+    export_csv: str = ''
+
+
+def init_session_state(init: SessionState) -> SessionState:
+    for attr in fields(init):
+        if attr.name not in st.session_state:
+            st.session_state[attr.name] = getattr(init, attr.name)
+
+    return st.session_state
+
+
+session_state = init_session_state(SessionState())
 
 
 def fuzzy_match_package(package: schema.Package, pattern: str):
@@ -32,18 +72,18 @@ def page_start():
 
     column_pipeline, column_packages = st.columns([1, 1])
 
-    factory: Factory = st.session_state['factory']
-    pipeline: Pipeline = st.session_state['pipeline']
-    event = st.session_state['event']
+    factory = session_state.factory
+    pipeline = session_state.pipeline
+    event = session_state.event
 
     with column_packages:
         st.subheader('Packages')
 
         search_package = st.text_input(
-            'Search', value=st.session_state['search_package'], key="search_package",
+            'Search', value=session_state.search_package, key="search_package",
             label_visibility='collapsed')
-        if search_package != st.session_state['search_package']:
-            st.session_state['search_package'] = search_package
+        if search_package != session_state.search_package:
+            session_state.search_package = search_package
             st.rerun()
 
         packages = [p for p in factory.packages if fuzzy_match_package(p, search_package)]
@@ -97,19 +137,19 @@ def page_start():
         with st.container(horizontal=True):
             no_solve = bool(event) or problem is None
             if st.button('Solve', disabled=no_solve):
-                st.session_state['event'] = 'solve'
+                session_state.event = 'solve'
                 st.rerun()
 
             no_next = bool(event) or problem is not None or not pipeline_packages
             if st.button('Next', disabled=no_next):
-                st.session_state['page'] = 'setting'
-                st.session_state['error'] = None
+                session_state.page = 'setting'
+                session_state.error = None
                 st.rerun()
 
     if event == 'solve':
         with busy.spinner('Solving...', show_time=True):
             pipeline.solve()
-            st.session_state['event'] = ''
+            session_state.event = ''
             st.rerun()
 
 
@@ -236,7 +276,7 @@ def parameter_object(pipeline: Pipeline, package_uid: str, param: schema.Paramet
 
 
 def component_parameter(package_uid: str, param: schema.Parameter):
-    pipeline: Pipeline = st.session_state['pipeline']
+    pipeline = session_state.pipeline
     parameter_generators = {
         schema.ParameterType.Integer: parameter_integer,
         schema.ParameterType.Number: parameter_number,
@@ -262,8 +302,8 @@ def page_setting():
 
     column_pipeline, column_parameters = st.columns([1, 1])
 
-    pipeline: Pipeline = st.session_state['pipeline']
-    edit_package_uid = st.session_state['package_uid']
+    pipeline = session_state.pipeline
+    edit_package_uid = session_state.package_uid
 
     edit_package: schema.Package | None = None
 
@@ -287,19 +327,19 @@ def page_setting():
                         st.markdown(f"- {model.name}` v{model.version}`")
                 with st.container(horizontal=True):
                     if st.button('Edit', key=f'edit:{package.uid}'):
-                        st.session_state['package_uid'] = package.uid
+                        session_state.package_uid = package.uid
                         st.rerun()
 
         with st.container(horizontal=True):
             if st.button('Prev'):
-                st.session_state['page'] = 'start'
-                st.session_state['error'] = None
+                session_state.page = 'start'
+                session_state.error = None
                 st.rerun()
 
             if st.button('Next'):
-                st.session_state['page'] = 'install'
-                st.session_state['event'] = 'satisfy'
-                st.session_state['error'] = None
+                session_state.page = 'install'
+                session_state.event = 'satisfy'
+                session_state.error = None
                 st.rerun()
 
     with column_parameters:
@@ -329,12 +369,12 @@ def page_install():
 
     column_pipeline, column_satisfaction = st.columns([1, 1])
 
-    pipeline: Pipeline = st.session_state['pipeline']
-    cache_dir: str = st.session_state['cache_dir']
-    satisfied: bool = st.session_state['satisfied']
-    unsatisfaction: UnsatisfactionConfig | None = st.session_state['unsatisfaction']
-    error: Any | None = st.session_state['error']
-    event = st.session_state['event']
+    pipeline = session_state.pipeline
+    cache_dir = session_state.cache_dir
+    satisfied = session_state.satisfied
+    unsatisfaction = session_state.unsatisfaction
+    error = session_state.error
+    event = session_state.event
 
     with column_pipeline:
         st.subheader('Pipeline')
@@ -354,14 +394,14 @@ def page_install():
 
         with st.container(horizontal=True):
             if st.button('Prev', disabled=bool(event)):
-                st.session_state['page'] = 'setting'
-                st.session_state['error'] = None
+                session_state.page = 'setting'
+                session_state.error = None
                 st.rerun()
 
             if st.button('Next', disabled=not satisfied):
-                st.session_state['page'] = 'run'
-                st.session_state['event'] = 'build'
-                st.session_state['error'] = None
+                session_state.page = 'run'
+                session_state.event = 'build'
+                session_state.error = None
                 st.rerun()
 
     with column_satisfaction:
@@ -389,12 +429,12 @@ def page_install():
         with st.container(horizontal=True):
             no_install = bool(event) or unsatisfaction is None or not unsatisfaction.modules
             if st.button('Install', disabled=no_install):
-                st.session_state['event'] = 'install'
+                session_state.event = 'install'
                 st.rerun()
 
             no_download = bool(event) or unsatisfaction is None or not unsatisfaction.models
             if st.button('Download', disabled=no_download):
-                st.session_state['event'] = 'download'
+                session_state.event = 'download'
                 st.rerun()
 
     if error is not None:
@@ -406,36 +446,36 @@ def page_install():
     if event == 'satisfy':
         with busy.spinner('Checking...', show_time=True):
             satisfied, unsatisfaction = pipeline.satisfied(cache_dir=cache_dir)
-            st.session_state['satisfied'] = satisfied
-            st.session_state['unsatisfaction'] = unsatisfaction
-            st.session_state['event'] = ''
+            session_state.satisfied = satisfied
+            session_state.unsatisfaction = unsatisfaction
+            session_state.event = ''
             st.rerun()
 
     if event == 'install':
         with busy.spinner('Install...', show_time=True):
             try:
                 pipeline.install_requirements()
-                st.session_state['error'] = None
+                session_state.error = None
             except Exception as e:
-                st.session_state['error'] = e
+                session_state.error = e
             finally:
-                st.session_state['event'] = 'satisfy'
+                session_state.event = 'satisfy'
                 st.rerun()
 
     if event == 'download':
         with busy.spinner('Download...', show_time=True):
             try:
                 pipeline.cache_models(cache_dir=cache_dir)
-                st.session_state['error'] = None
+                session_state.error = None
             except Exception as e:
-                st.session_state['error'] = e
+                session_state.error = e
             finally:
-                st.session_state['event'] = 'satisfy'
+                session_state.event = 'satisfy'
                 st.rerun()
 
 
 def run_image(runner: Runner, file: UploadedFile):
-    reports = st.session_state.get('reports', [])
+    reports = session_state.reports
 
     if not reports:
         with st.spinner('Open image...', show_time=True):
@@ -448,25 +488,25 @@ def run_image(runner: Runner, file: UploadedFile):
                     'default': image,
                 })
             except Exception as e:
-                st.session_state['error'] = e
+                session_state.error = e
                 st.rerun()
 
-        st.session_state['reports'] = [report]
+        session_state.reports = [report]
     else:
-        report = reports
+        report = reports[0]
 
     def to_json() -> str:
-        content = st.session_state.get('export_json', '')
+        content = session_state.export_json
         if not content:
             content = json.dumps(report, ensure_ascii=False, indent=2)
-            st.session_state['export_json'] = content
+            session_state.export_json = content
         return content
 
     def to_csv() -> str:
-        content = st.session_state.get('export_csv', '')
+        content = session_state.export_csv
         if not content:
             content = list2csv([report])
-            st.session_state['export_csv'] = content
+            session_state.export_csv = content
         return content
 
     with st.container(horizontal=True):
@@ -545,8 +585,8 @@ class ReleaseCapture(object):
 
 
 def run_video(runner: Runner, file: UploadedFile):
-    upload_dir = st.session_state['upload_dir']
-    reports = st.session_state.get('reports', [])
+    upload_dir = session_state.upload_dir
+    reports = session_state.reports
 
     if not reports:
         with CacheFile(file, temp_dir=upload_dir) as temp:
@@ -574,24 +614,24 @@ def run_video(runner: Runner, file: UploadedFile):
                         }, timestamp=capture.get(cv2.CAP_PROP_POS_MSEC) / 1000)
                         reports.append(report)
                     except Exception as e:
-                        st.session_state['error'] = e
+                        session_state.error = e
                         st.rerun()
                     progress.progress(i / n, text=f'[{i}/{n}]')
 
-        st.session_state['reports'] = reports
+        session_state.reports = reports
 
     def to_json() -> str:
-        content = st.session_state.get('export_json', '')
+        content = session_state.export_json
         if not content:
             content = json.dumps(reports, ensure_ascii=False, indent=2)
-            st.session_state['export_json'] = content
+            session_state.export_json = content
         return content
 
     def to_csv() -> str:
-        content = st.session_state.get('export_csv', '')
+        content = session_state.export_csv
         if not content:
             content = list2csv(reports)
-            st.session_state['export_csv'] = content
+            session_state.export_csv = content
         return content
 
     with st.container(horizontal=True):
@@ -617,12 +657,12 @@ def run_video(runner: Runner, file: UploadedFile):
 def page_run():
     st.title('Run')
 
-    runner: Runner | None = st.session_state['runner']
-    pipeline: Pipeline = st.session_state['pipeline']
-    cache_dir: str = st.session_state['cache_dir']
-    error: Any | None = st.session_state['error']
+    runner = session_state.runner
+    pipeline = session_state.pipeline
+    cache_dir = session_state.cache_dir
+    error = session_state.error
 
-    event = st.session_state['event']
+    event = session_state.event
     busy = st.empty()
 
     if runner is not None:
@@ -634,10 +674,10 @@ def page_run():
             type=['jpg', 'png', 'bmp', 'wav', 'mp4', 'avi', 'wmv'],
         )
         if file is not None:
-            if st.session_state.get('file', None) != file.file_id:
-               st.session_state['reports'] = []
-               st.session_state['export_json'] = ''
-               st.session_state['export_csv'] = ''
+            if session_state.file != file.file_id:
+               session_state.reports = []
+               session_state.export_json = ''
+               session_state.export_csv = ''
 
             if file.type.startswith('image/'):
                 st.image(file)
@@ -646,18 +686,17 @@ def page_run():
                 st.video(file)
                 run_video(runner, file)
 
-            st.session_state['file'] = file.file_id
+            session_state.file = file.file_id
 
     if event == 'build':
         with busy.spinner('Building...', show_time=True):
             try:
-                building_runner = Runner(pipeline, device=None, cache_dir=cache_dir)
-                st.session_state['runner'] = building_runner
-                st.session_state['error'] = None
+                session_state.runner = Runner(pipeline, device=None, cache_dir=cache_dir)
+                session_state.error = None
             except Exception as e:
-                st.session_state['error'] = e
+                session_state.error = e
             finally:
-                st.session_state['event'] = ''
+                session_state.event = ''
                 st.rerun()
 
     if error is not None:
@@ -724,6 +763,7 @@ class Args(Protocol):
     disable_builtin: bool = False
     cache_dir: str = None
     upload_dir: str = None
+    log: str = None
 
 
 def initialize(args: Args):
@@ -735,48 +775,29 @@ def initialize(args: Args):
     )
     st.markdown(f'<style>{global_style}</style>', unsafe_allow_html=True)
 
-    # initialize factory and cache dir
-    if 'factory' not in st.session_state:
-        st.session_state['factory'] = load_factory(
+    if session_state.log is None and args.log:
+        set_logger_level(args.log)
+        session_state.log = args.log
+
+    if session_state.factory is None:
+        session_state.factory = load_factory(
             dirs=args.dirs,
             files=args.files,
             urls=args.urls,
             disable_builtin=args.disable_builtin,
         )
-    if 'cache_dir' not in st.session_state:
-        st.session_state['cache_dir'] = args.cache_dir
-    if 'upload_dir' not in st.session_state:
+    if session_state.cache_dir is None and args.cache_dir:
+        session_state.cache_dir = args.cache_dir
+    if session_state.upload_dir is None:
         if args.upload_dir:
             upload_dir = os.path.abspath(args.upload_dir)
         else:
             upload_dir = os.path.join(tempfile.gettempdir(), 'fabopsy-webui', 'upload')
-        st.session_state['upload_dir'] = upload_dir
+        session_state.upload_dir = upload_dir
 
     # initialize pipeline
-    factory = st.session_state['factory']
-    if 'pipeline' not in st.session_state:
-        st.session_state['pipeline'] = Pipeline(factory)
-
-    # initialize values
-    if 'page' not in st.session_state:
-        st.session_state['page'] = 'start'
-    if 'search_package' not in st.session_state:
-        st.session_state['search_package'] = ''
-    if 'event' not in st.session_state:
-        st.session_state['event'] = ''
-
-    if 'package_uid' not in st.session_state:
-        st.session_state['package_uid'] = ''
-
-    if 'satisfied' not in st.session_state:
-        st.session_state['satisfied'] = False
-    if 'unsatisfaction' not in st.session_state:
-        st.session_state['unsatisfaction'] = None
-    if 'error' not in st.session_state:
-        st.session_state['error'] = None
-
-    if 'runner' not in st.session_state:
-        st.session_state['runner'] = None
+    if session_state.pipeline is None:
+        session_state.pipeline = Pipeline(session_state.factory)
 
 
 def parse_args() -> Args:
@@ -826,6 +847,13 @@ def parse_args() -> Args:
         help='Directory to store uploaded files (default: upload subdirectory in current working directory)'
     )
 
+    parser.add_argument(
+        '--log',
+        type=str,
+        default=None,
+        help='string or int, like DEBUG, INFO, WARNING or 10'
+    )
+
     return cast(Args, cast(object, parser.parse_args()))
 
 
@@ -839,7 +867,7 @@ def main():
         'run': page_run,
     }
 
-    page = st.session_state['page']
+    page = session_state.page
     if page not in pages:
         st.error(f'Can not find page: {page}')
         return

@@ -5,6 +5,7 @@ import logging
 
 __all__ = [
     'logger',
+    'set_level',
 ]
 
 
@@ -51,3 +52,24 @@ console_handler.setLevel(logging.NOTSET)
 console_handler.setFormatter(formatter)
 
 logger.addHandler(console_handler)
+
+
+def set_level(lv: str | int | None):
+    map_log_level = {
+        'CRITICAL': logging.CRITICAL,
+        'FATAL': logging.FATAL,
+        'ERROR': logging.ERROR,
+        'WARNING': logging.WARNING,
+        'WARN': logging.WARN,
+        'INFO': logging.INFO,
+        'DEBUG': logging.DEBUG,
+        'NOTSET': logging.NOTSET,
+    }
+
+    match lv:
+        case str(x):
+            level_value: int | None = map_log_level.get(x.strip().upper(), None)
+            if level_value is not None:
+                logger.setLevel(level_value)
+        case int(x):
+            logger.setLevel(x)

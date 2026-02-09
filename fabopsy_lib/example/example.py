@@ -17,15 +17,18 @@ class ExampleInstance(api.Instance):
         self.__device = device
 
     def inference(self, *, data: dict[str, Any], report: dict[str, Any], **kwargs) -> dict[str, Any]:
-        print(f'Data: {data}')
+        # print(f'Data: {data}')
 
         time.sleep(0.01)
 
         default_input = data['default']
         image = numpy.ascontiguousarray(default_input)
 
+        print(f'Input default: {type(image)} {image.shape}')
+
         return {
             'example_output': {
+                'values': [None, 12, 12.4, 'fff', False],
                 'shape': list(image.shape),
                 'output': [1, 2, 3],
                 'model': self.__model_path,
