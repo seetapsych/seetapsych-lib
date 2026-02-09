@@ -5,7 +5,7 @@ import uuid
 import argparse
 import tempfile
 import os.path
-from dataclasses import dataclass, fields, field
+from dataclasses import dataclass, fields, field, Field
 from typing import cast, Any, Protocol, TypeVar
 
 import numpy
@@ -49,8 +49,9 @@ class SessionState(object):
 
 def init_session_state(init: SessionState) -> SessionState:
     for attr in fields(init):
+        attr: Field
         if attr.name not in st.session_state:
-            st.session_state[attr.name] = getattr(init, attr.name)
+            setattr(st.session_state, attr.name, getattr(init, attr.name))
 
     return st.session_state
 

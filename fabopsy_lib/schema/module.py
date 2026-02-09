@@ -4,7 +4,7 @@ import re
 import json
 import uuid
 from enum import Enum
-from typing import Any, Optional, Literal, Union
+from typing import Any, Literal
 
 from pydantic.fields import FieldInfo
 from pydantic import BaseModel, Field, model_validator
@@ -192,6 +192,10 @@ def test():
     print(example())
     t = parse({'version': '1.0', 'module': {'name': 'Name', 'version': '1.0.0', 'description': 'No description'}, 'packages': []})
     print(t.module.format_version)
+
+    from fabopsy_lib.utils.markdown import schema2markdown
+    md = schema2markdown(Module.model_json_schema())
+    print(md)
 
 
 if __name__ == '__main__':

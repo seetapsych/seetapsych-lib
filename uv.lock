@@ -42,6 +42,15 @@ wheels = [
 ]
 
 [[package]]
+name = "babel"
+version = "2.18.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/b2/51899539b6ceeeb420d40ed3cd4b7a40519404f9baf3d4ac99dc413a834b/babel-2.18.0.tar.gz", hash = "sha256:b80b99a14bd085fcacfa15c9165f651fbb3406e66cc603abf11c5750937c992d", size = 9959554, upload-time = "2026-02-01T12:30:56.078Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/f5/21d2de20e8b8b0408f0681956ca2c69f1320a3848ac50e6e7f39c6159675/babel-2.18.0-py3-none-any.whl", hash = "sha256:e2b422b277c2b9a9630c1d7903c2a00d0830c409c59ac8cae9081c92f1aeba35", size = 10196845, upload-time = "2026-02-01T12:30:53.445Z" },
+]
+
+[[package]]
 name = "blinker"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -183,6 +192,7 @@ name = "fabopsy-lib"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "jsonschema2md" },
     { name = "packaging" },
     { name = "platformdirs" },
     { name = "pydantic" },
@@ -199,6 +209,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jsonschema2md", specifier = ">=1.7.0" },
     { name = "packaging", specifier = ">=25.0" },
     { name = "platformdirs", specifier = ">=4.5.1" },
     { name = "pydantic", specifier = ">=2.12.5" },
@@ -283,6 +294,29 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/19/74/a633ee74eb36c44aa6d1095e7cc5569bebf04342ee146178e2d36600708b/jsonschema_specifications-2025.9.1.tar.gz", hash = "sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d", size = 32855, upload-time = "2025-09-08T01:34:59.186Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl", hash = "sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe", size = 18437, upload-time = "2025-09-08T01:34:57.871Z" },
+]
+
+[[package]]
+name = "jsonschema2md"
+version = "1.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "babel" },
+    { name = "markdown" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/aa/c3/056bfe8d6360750ed4a13eeafd37d5ace8859b69c9fdb8d6aac82dad7d58/jsonschema2md-1.7.0.tar.gz", hash = "sha256:d69a5b011bf355c005e3c18be4515ae46d2689b38b593ced8d03c5ab66ddbaf3", size = 20017, upload-time = "2025-08-14T11:55:42.67Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/c5/0f9bd3ac958f8136e24e980ecd23e02de929eed9946fc4bf91e057142483/jsonschema2md-1.7.0-cp313-cp313-manylinux_2_39_x86_64.whl", hash = "sha256:06c327866a845827bc08b98cbea70ec96f46c0f8b67cb5a6d9833078a78764d3", size = 22991, upload-time = "2025-08-14T11:55:41.556Z" },
+]
+
+[[package]]
+name = "markdown"
+version = "3.10.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b7/b1/af95bcae8549f1f3fd70faacb29075826a0d689a27f232e8cee315efa053/markdown-3.10.1.tar.gz", hash = "sha256:1c19c10bd5c14ac948c53d0d762a04e2fa35a6d58a6b7b1e6bfcbe6fefc0001a", size = 365402, upload-time = "2026-01-21T18:09:28.206Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/1b/6ef961f543593969d25b2afe57a3564200280528caa9bd1082eecdd7b3bc/markdown-3.10.1-py3-none-any.whl", hash = "sha256:867d788939fe33e4b736426f5b9f651ad0c0ae0ecf89df0ca5d1176c70812fe3", size = 107684, upload-time = "2026-01-21T18:09:27.203Z" },
 ]
 
 [[package]]
