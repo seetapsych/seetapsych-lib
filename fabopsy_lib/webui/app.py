@@ -18,6 +18,11 @@ from fabopsy_lib.runtime.pipeline import UnsatisfactionConfig
 from fabopsy_lib.runtime.export import list2csv
 from fabopsy_lib import schema
 from fabopsy_lib.utils.logger import set_level as set_logger_level
+from fabopsy_lib.attributes import schema as attribute_schema
+from fabopsy_lib.utils.markdown import schema2markdown
+
+ICON_ERROR = "\N{CROSS MARK}"
+ICON_PAGE = "\N{CRYSTAL BALL}"
 
 
 @dataclass
@@ -42,7 +47,7 @@ class SessionState(object):
     unsatisfaction: UnsatisfactionConfig | None = False
 
     file: Any = None
-    reports: list[dict[str, Any]] = field(default_factory=lambda:[])
+    reports: list[dict[str, Any]] = field(default_factory=lambda: [])
     export_json: str = ''
     export_csv: str = ''
 
@@ -66,6 +71,15 @@ def fuzzy_match_package(package: schema.Package, pattern: str):
         return pattern in s.lower() if s else False
 
     return any(match(s) for s in (package.name, package.description)) or any(match(s) for s in package.provides)
+
+
+@st.dialog(title='Attribute Description')
+def show_attribute_description(attr: str):
+    model = attribute_schema.get(attr, None)
+    if model is None:
+        st.warning('No schema found!')
+        return
+    st.markdown(schema2markdown(model.model_json_schema()), unsafe_allow_html=True)
 
 
 def page_start():
@@ -93,8 +107,9 @@ def page_start():
             with st.container(border=True):
                 with st.container(horizontal=True):
                     st.markdown(f"**{package.name}** `v{package.version}`")
-                    for attr in package.provides:
-                        st.badge(attr)
+                    for i, attr in enumerate(package.provides):
+                        if st.button(attr, type='tertiary', key=f'click:{package.uid}:{i}-{attr}'):
+                            show_attribute_description(attr)
                 st.write(package.description)
                 with st.container(horizontal=True):
                     if st.button('Select', key=f'select:{package.uid}'):
@@ -127,11 +142,11 @@ def page_start():
             # list errors
             with st.container():
                 for p in problem.missing_module_packages:
-                    st.error(f'Missing module for "{p.name}"', icon='❌')
+                    st.error(f'Missing module for "{p.name}"', icon=ICON_ERROR)
                 for p in problem.missing_model_packages:
-                    st.error(f'Missing model for "{p.name}" where usage = {p.usage_models}', icon='❌')
+                    st.error(f'Missing model for "{p.name}" where usage = {p.usage_models}', icon=ICON_ERROR)
                 for p in problem.attributes:
-                    st.error(f'Missing required attribute "{p}"', icon='❌')
+                    st.error(f'Missing required attribute "{p}"', icon=ICON_ERROR)
 
         busy = st.empty()
 
@@ -190,7 +205,9 @@ def parameter_selection(pipeline: Pipeline, package_uid: str, param: schema.Para
 
 
 T = TypeVar('T')
-def format_array(t: type[T],  value: list[T]) -> str:
+
+
+def format_array(t: type[T], value: list[T]) -> str:
     return ', '.join(map(str, value))
 
 
@@ -417,13 +434,13 @@ def page_install():
         else:
             for m in unsatisfaction.modules:
                 requirements = '\n'.join([f'- {r}' for r in m.requirements])
-                st.error(f'Module **{m.name}** `v{m.version}` require:\n\n{requirements}', icon='❌')
+                st.error(f'Module **{m.name}** `v{m.version}` require:\n\n{requirements}', icon=ICON_ERROR)
             for m in unsatisfaction.entries:
                 prefix = m.package or ''
                 suffix = '.' + m.method if m.package else m.method
-                st.error(f'Entry `{prefix}{suffix}` is not callable.', icon='❌')
+                st.error(f'Entry `{prefix}{suffix}` is not callable.', icon=ICON_ERROR)
             for m in unsatisfaction.models:
-                st.error(f'Missing cache **{m.name or "<anonymous>"}** `v{m.version}`.', icon='❌')
+                st.error(f'Missing cache **{m.name or "<anonymous>"}** `v{m.version}`.', icon=ICON_ERROR)
 
         busy = st.empty()
 
@@ -549,7 +566,7 @@ class CacheFile(object):
     def save(self):
         if os.path.exists(self.__path):
             return
-        
+
         dirname = os.path.dirname(self.__path)
         if dirname:
             os.makedirs(dirname, exist_ok=True)
@@ -563,7 +580,7 @@ class CacheFile(object):
     def __enter__(self):
         if self.__auto_save:
             self.save()
-            
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -671,14 +688,15 @@ def page_run():
 
         file = st.file_uploader(
             'Select image/video',
-            key=f'upload_input',
+            key='upload_input',
             type=['jpg', 'png', 'bmp', 'wav', 'mp4', 'avi', 'wmv'],
+            max_upload_size=256,
         )
         if file is not None:
             if session_state.file != file.file_id:
-               session_state.reports = []
-               session_state.export_json = ''
-               session_state.export_csv = ''
+                session_state.reports = []
+                session_state.export_json = ''
+                session_state.export_csv = ''
 
             if file.type.startswith('image/'):
                 st.image(file)
@@ -754,6 +772,11 @@ global_style = """
     max-height: 50vw;
   }
 }
+
+.stButton button[kind="tertiary"] {
+    min-height: unset;
+    color: #409EFF;
+}
 """
 
 
@@ -772,7 +795,7 @@ def initialize(args: Args):
     st.set_page_config(
         layout="wide",
         page_title="Fabopsy WebUI",
-        page_icon="🕯️"
+        page_icon=ICON_PAGE,
     )
     st.markdown(f'<style>{global_style}</style>', unsafe_allow_html=True)
 
