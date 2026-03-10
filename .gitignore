@@ -4,6 +4,27 @@
 /build/
 /dist/
 /*.egg-info/
+/.eggs/
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/
+/.tox/
+/.nox/
+/htmlcov/
+/.coverage
+/coverage.xml
+/.hypothesis/
+/.cache/
+/.upload/
+/.streamlit/
+/.ipynb_checkpoints/
+*.log
+.env
 
 # compiled files
 *.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.so
+*$py.class
