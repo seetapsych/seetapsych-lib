@@ -55,12 +55,12 @@ def flatten(
         match item.value:
             case None:
                 yield root, map_none(root)
+            case bool(x):
+                yield root, map_bool(root, x)
             case int(x):
                 yield root, map_int(root, x)
             case float(x):
                 yield root, map_float(root, x)
-            case bool(x):
-                yield root, map_bool(root, x)
             case str(x):
                 yield root, x
             case bytes(x):

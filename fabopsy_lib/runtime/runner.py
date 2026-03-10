@@ -86,7 +86,7 @@ class Runner(object):
 
         # check input modals
         if not isinstance(data, dict):
-            data['default'] = data
+            data = {'default': data}
 
         missing_modals = [modal for modal in self.__inputs if modal not in data]
         if missing_modals:

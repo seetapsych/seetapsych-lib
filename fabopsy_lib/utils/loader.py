@@ -54,7 +54,7 @@ def load(f: str | bytes | IO[str] | IO[bytes], extension: str = None) -> Any:
     if isinstance(f, (str, bytes)):
         filename = f.decode(encoding='utf-8') if isinstance(f, bytes) else f
         extension = extension if extension else os.path.splitext(filename)[-1]
-        with open(f, 'r', encoding='utf-8') as stream:
+        with open(filename, 'r', encoding='utf-8') as stream:
             content = stream.read()
     elif hasattr(f, 'read'):
         content = f.read()

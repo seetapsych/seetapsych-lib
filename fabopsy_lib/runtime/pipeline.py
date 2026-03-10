@@ -230,8 +230,8 @@ class Pipeline(object):
             self.__config.models[package_uid] = [model.model_copy()]
             return True
 
-        if next((m for m in self.__config.models if m.uid == model.uid), None) is None:
-            package_models.append(model)
+        if next((m for m in package_models if m.uid == model.uid), None) is None:
+            package_models.append(model.model_copy())
             return True
 
         return False
@@ -451,7 +451,7 @@ class Pipeline(object):
                 packages[i] = fp.model_copy()
 
         # check models
-        invalid_models: dict[schema.Uid, list[schema.Model]] = defaultdict([])
+        invalid_models: dict[schema.Uid, list[schema.Model]] = defaultdict(list)
         package_models = self.__config.models
         for package_uid, models in package_models.items():
             package = self.__factory.query_package(package_uid)
@@ -479,7 +479,7 @@ class Pipeline(object):
                 invalid_attributes.append(attr)
 
         # check parameters
-        invalid_parameters: dict[schema.Uid, list[schema.Parameter]] = defaultdict([])
+        invalid_parameters: dict[schema.Uid, list[schema.Parameter]] = defaultdict(list)
         package_parameters = self.__config.parameters
         for package_uid, parameters in package_parameters.items():
             factory_package = self.__factory.query_package(package_uid)
