@@ -2,36 +2,101 @@
 
 > Face and body based psychology analysis
 
-## Installation or Setup
+FaboPsy Lib is a Python library for face- and body-based psychology analysis. It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
 
-### Setup
+## Requirements
 
-Optional step: Install precise dependencies using `uv.lock`
+- Python >= 3.10
+- (Recommended) uv package manager: https://github.com/astral-sh/uv
+
+## Installation
+
+### Using uv (recommended)
+
 ```sh
 uv sync
 ```
 
-> What is `uv`? See https://github.com/astral-sh/uv for more information.
+Install development dependencies (WebUI, etc.):
 
-Install the project and its production dependencies
 ```sh
-pip install .
+uv sync --group dev
 ```
 
-Install the project (in editable development mode) and development dependencies
+### Using pip
+
+Install runtime dependencies:
+
 ```sh
-pip install -e .[dev]
+python -m pip install .
 ```
 
-If you are managing the project with uv, you can replace pip with uv pip: `uv pip install .`.
+If you want to run the WebUI, install extra tools manually:
 
-## Configure
+```sh
+python -m pip install streamlit opencv-python
+```
 
-### Environment
+## Quick Start
 
-The following environment variables can be used for:
+### Run WebUI (Streamlit)
+
+```sh
+streamlit run fabopsy_lib/webui/app.py -- --log INFO
+```
+
+Common arguments (pass them after `--`):
+
+- `--dirs <DIR...>`: load modules from directories
+- `--files <FILE...>`: load modules from local config files
+- `--urls <URL...>`: load modules from remote URLs
+- `--disable-builtin`: disable builtin modules
+- `--cache-dir <DIR>`: model cache directory
+- `--upload-dir <DIR>`: upload directory
+- `--log <LEVEL>`: log level (e.g., `DEBUG`, `INFO`, `WARNING`, or an integer like `10`)
+
+### Programmatic Usage
+
+```python
+import numpy as np
+
+from fabopsy_lib.api import Device
+from fabopsy_lib.runtime import Factory, Pipeline, Runner
+
+factory = Factory()
+factory.load_builtin_modules()
+factory.load_local_module("fabopsy_lib/example/example.toml")
+
+pkg = next(p for p in factory.packages if p.name == "Example Package")
+
+pipeline = Pipeline(factory, packages=[pkg.uid])
+pipeline.add_model(pkg.uid, pkg.models[0].uid)
+pipeline.solve()
+
+ok, _ = pipeline.satisfied()
+if not ok:
+    pipeline.install_requirements()
+
+runner = Runner(pipeline, device=Device("cpu"))
+result = runner.run(np.zeros((64, 64, 3), dtype=np.uint8))
+print(result)
+```
+
+## Configuration
+
+### Environment Variables
+
+The following environment variables are supported:
 
 | Env               | Description                                                                      |
 |:------------------|:---------------------------------------------------------------------------------|
-| FABOPSY_LOG_LEVEL | Change default log level.<br/>Could be WARNING, INFO, DEBUG or an integer value. |
-| FABOPSY_CACHE_DIR | Change default cache dir.                                                        |
+| FABOPSY_LOG_LEVEL | Change default log level. Could be `WARNING`, `INFO`, `DEBUG`, or an integer (e.g., `10`). |
+| FABOPSY_CACHE_DIR | Base directory for model cache. Models are cached under `<CACHE_DIR>/models`.     |
+
+## Development
+
+Version check:
+
+```sh
+python tests/version.py
+```
