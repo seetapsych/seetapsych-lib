@@ -30,7 +30,7 @@ Uid = str
 class Entity(BaseModel):
     uid: Uid = Field(
         default_factory=lambda: str(uuid.uuid4()),
-        description='Unique identifier. A unique string should be provided, or the UUID would to be filled.'
+        description='Unique identifier. Provide a unique string, or a UUID will be generated.'
     )
     name: str = Field('', description='')
     version: str = Field(
@@ -38,7 +38,7 @@ class Entity(BaseModel):
         repr=True,
         pattern=r'^(\d+)(?:\.(\d+)(?:\.(\d+))?)?(-(?:[a-zA-Z0-9_.-]+))?(\+(?:[a-zA-Z0-9_.-]+))?$',
         examples=['1.2', '0.1.2', '1.23.3-alpha01', '2.0.1+20260101'],
-        description='version like MAJOR[.MINOR[.PATCH]][-PRERELEASE][+BUILD]')
+        description='Version format: MAJOR[.MINOR[.PATCH]][-PRERELEASE][+BUILD]')
     description: str = Field('', description='')
     keywords: list[str] = Field([], description='')
 
@@ -56,35 +56,50 @@ class Entry(BaseModel):
     package: str | None = Field(
         None,
         examples=['x.y.z'],
-        description='The package where the method is called')
+        description='Package from which the method is called')
     method: str = Field(
         examples=['a.b.c.func'],
         description='Python method for this entry. '
                     'If a package is provided, '
-                    'the complete package name will be concatenated with the package name of the method prefix')
+                    'the package name is prepended as the method prefix')
     args: list[Any] = Field([])
     kwargs: dict[str, Any] = Field({})
 
 
 class CloudModel(BaseModel):
     host: str = Field(
-        examples=['modelscope'],
-        description='The cloud host to download model')
+        examples=['modelscope', 'huggingface'],
+        description='Cloud host for downloading the model')
     model_id: str = Field(
-        description='Model id for model hosting repo')
+        description='Model ID in the hosting repository')
+    revision: str = Field(
+        '',
+        description='Optional revision/tag/commit to download')
+    repo_type: str = Field(
+        '',
+        description='Repository type for the cloud host (e.g., Hugging Face: model/dataset/space)')
+    allow_patterns: list[str] | None = Field(
+        None,
+        description='Optional allow patterns for file filtering (Hugging Face only)')
+    ignore_patterns: list[str] | None = Field(
+        None,
+        description='Optional ignore patterns for file filtering (Hugging Face only)')
+    index: str = Field(
+        '',
+        description='Optional index file/dir path for existence check, relative to the downloaded directory')
 
 
 class DownloadModel(BaseModel):
     index: str = Field(
-        description='Download output filename as index for model cache, which will used for exists check.')
+        description='Output filename used as the model cache index, for existence checks.')
     url: str = Field(
-        description='Download model link. HTTP recommended')
+        description='Model download URL. HTTP is recommended')
     md5: str = Field(
         '',
-        description='Download model file md5')
+        description='MD5 checksum of the downloaded model file')
     unpack: bool = Field(
         False,
-        description='Is the downloaded file a compressed file? If so, the file will be automatically decompressed.')
+        description='Whether the downloaded file is compressed. If true, it will be decompressed automatically.')
 
 
 class Model(Entity):
@@ -97,9 +112,9 @@ class Model(Entity):
 
     usage: str = Field(
         '',
-        description='Used to specify the specific models within a multi-model algorithm package')
+        description='Specifies the model to use within a multi-model algorithm package')
 
-    recommended: bool = Field(False, description='The recommended model will be used by default')
+    recommended: bool = Field(False, description='If true, this model is used by default')
 
     cloud: CloudModel | None = Field(
         None,
@@ -111,7 +126,7 @@ class Model(Entity):
 
     entry: Entry | None = Field(
         None,
-        description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Model')
+        description='Python entry for loading this model. The entry should return @ref fabopsy_lib.api.Model')
 
     @model_validator(mode='after')
     def check_not_all_none(self):
@@ -144,28 +159,28 @@ class Parameter(BaseModel):
 class Package(Entity):
     usage_models: list[str] = Field(
         [],
-        description='If it is greater than 1, the corresponding usage model needs to be used for initialization')
-    inputs: list[str] = Field([], description='Describe modal if this package need multimodal')
-    requires: list[str] = Field([], description='Required attributes to run this package')
-    provides: list[str] = Field([], description='Provided attributes to run this package')
+        description='If more than one usage model is available, a specific one must be selected for initialization')
+    inputs: list[str] = Field([], description='Lists input modalities if this package is multimodal')
+    requires: list[str] = Field([], description='Attributes required to run this package')
+    provides: list[str] = Field([], description='Attributes provided by this package')
     entry: Entry = Field(
-        description='Python entry for loading this model. Entry should return @ref fabopsy_lib.api.Package')
-    parameters: list[Parameter] = Field([], description='Parameters for package controlling')
+        description='Python entry for loading this package. The entry should return @ref fabopsy_lib.api.Package')
+    parameters: list[Parameter] = Field([], description='Parameters for controlling the package')
     models: list[Model] = Field(
-        description='The available models can be switched according to the situation')
+        description='Available models that can be switched as needed')
 
 
 class ModuleSpec(Entity):
     requirements: list[str] = Field(
         [],
-        description='Python requirements')
+        description='Python package requirements')
 
 
 class Module(BaseModel):
     version: Literal['1.0'] = Field(
         '1.0',
         examples=['1.0'],
-        description='Module configuration protocol version, which is different from the current module version')
+        description="Module configuration protocol version, distinct from the module's own version")
 
     module: ModuleSpec = Field(description="Module specification")
 

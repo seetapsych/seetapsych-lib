@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
+import json
 import re
-import os.path
+import os
+from typing import Callable
 
 from fabopsy_lib import api
 from fabopsy_lib import schema
@@ -14,6 +16,7 @@ __all__ = [
     'build_model',
     'exists_model',
     'LocalModel',
+    'register_cloud_downloader',
 ]
 
 
@@ -34,6 +37,22 @@ def sanitize_folder(name: str):
 
 def entity_cache_dir(entity: schema.Entity, cache_dir: str = None) -> str:
     return os.path.join(cache_dir or default_cache_dir(), sanitize_folder(entity.uid) or '__anonymous__')
+
+
+_CLOUD_DOWNLOADERS: dict[str, Callable[[schema.CloudModel, str], str]] = {}
+
+
+def _normalize_host(host: str) -> str:
+    return (host or '').strip().lower()
+
+
+def register_cloud_downloader(hosts: list[str], downloader: Callable[[schema.CloudModel, str], str]):
+    for h in hosts:
+        _CLOUD_DOWNLOADERS[_normalize_host(h)] = downloader
+
+
+def _get_cloud_downloader(host: str) -> Callable[[schema.CloudModel, str], str] | None:
+    return _CLOUD_DOWNLOADERS.get(_normalize_host(host))
 
 
 class WrapperModel(api.UsageModel):
@@ -78,11 +97,135 @@ class CloudModel(api.UsageModel):
     def usage(self) -> str:
         return self.__usage
 
+    def __marker_path(self) -> str:
+        return os.path.join(self.__cache_dir, '.fabopsy_cloud.json')
+
+    def __read_marker(self) -> dict | None:
+        path = self.__marker_path()
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                marker = json.load(f)
+            if not isinstance(marker, dict):
+                return None
+            return marker
+        except FileNotFoundError:
+            return None
+        except Exception:
+            return None
+
+    def __marker_matches(self, marker: dict) -> bool:
+        if marker.get('host') != self.__cfg.host:
+            return False
+        if marker.get('model_id') != self.__cfg.model_id:
+            return False
+        if marker.get('revision', '') != (self.__cfg.revision or ''):
+            return False
+        if marker.get('repo_type', '') != (self.__cfg.repo_type or ''):
+            return False
+        return True
+
+    def __downloaded_dir_from_marker(self, marker: dict) -> str | None:
+        path = marker.get('path')
+        if not isinstance(path, str) or path == '':
+            return None
+        if os.path.isabs(path):
+            model_dir = os.path.abspath(path)
+        else:
+            model_dir = os.path.abspath(os.path.join(self.__cache_dir, path))
+        if not os.path.exists(model_dir):
+            return None
+        if self.__cfg.index:
+            if not os.path.exists(os.path.join(model_dir, self.__cfg.index)):
+                return None
+        return model_dir
+
     def exists(self) -> bool:
-        return False
+        if not self.__cache_dir:
+            return False
+        marker = self.__read_marker()
+        if not marker or not self.__marker_matches(marker):
+            return False
+        return self.__downloaded_dir_from_marker(marker) is not None
 
     def cache(self) -> str:
-        raise NotImplementedError
+        if not self.__cache_dir:
+            raise RuntimeError('cache_dir must be provided for cloud models')
+
+        marker = self.__read_marker()
+        if marker and self.__marker_matches(marker):
+            model_dir = self.__downloaded_dir_from_marker(marker)
+            if model_dir:
+                return model_dir
+
+        os.makedirs(self.__cache_dir, exist_ok=True)
+
+        downloader = _get_cloud_downloader(self.__cfg.host)
+        if downloader is None:
+            raise RuntimeError(f'Unsupported cloud host: {self.__cfg.host}')
+        model_dir = os.path.abspath(downloader(self.__cfg, self.__cache_dir))
+
+        cache_dir_abs = os.path.abspath(self.__cache_dir)
+        if os.path.commonpath([cache_dir_abs, model_dir]) != cache_dir_abs:
+            raise RuntimeError(f'Cloud model downloaded outside cache_dir: {model_dir}')
+
+        if self.__cfg.index and not os.path.exists(os.path.join(model_dir, self.__cfg.index)):
+            raise RuntimeError(f'Index was not found in cloud model directory: {self.__cfg.index}')
+
+        rel_path = os.path.relpath(model_dir, self.__cache_dir)
+        marker = {
+            'host': self.__cfg.host,
+            'model_id': self.__cfg.model_id,
+            'revision': self.__cfg.revision or '',
+            'repo_type': self.__cfg.repo_type or '',
+            'path': rel_path,
+        }
+        with open(self.__marker_path(), 'w', encoding='utf-8') as f:
+            json.dump(marker, f, ensure_ascii=False, indent=2)
+
+        return model_dir
+
+
+def _download_huggingface(cfg: schema.CloudModel, cache_dir: str) -> str:
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as e:
+        raise RuntimeError('huggingface_hub is required for CloudModel host=huggingface') from e
+    revision = (cfg.revision or '').strip() or None
+    repo_type = (cfg.repo_type or '').strip() or None
+    kwargs = {
+        'repo_id': cfg.model_id,
+        'local_dir': cache_dir,
+        'revision': revision,
+        'local_dir_use_symlinks': False,
+    }
+    if repo_type:
+        kwargs['repo_type'] = repo_type
+    if cfg.allow_patterns is not None:
+        kwargs['allow_patterns'] = cfg.allow_patterns
+    if cfg.ignore_patterns is not None:
+        kwargs['ignore_patterns'] = cfg.ignore_patterns
+    path = snapshot_download(**kwargs)
+    return str(path)
+
+
+def _download_modelscope(cfg: schema.CloudModel, cache_dir: str) -> str:
+    snapshot_download = None
+    try:
+        from modelscope.hub.snapshot_download import snapshot_download as _snapshot_download
+        snapshot_download = _snapshot_download
+    except ImportError:
+        try:
+            from modelscope.hub.api import snapshot_download as _snapshot_download
+            snapshot_download = _snapshot_download
+        except ImportError as e:
+            raise RuntimeError('modelscope is required for CloudModel host=modelscope') from e
+    revision = (cfg.revision or '').strip() or None
+    path = snapshot_download(cfg.model_id, cache_dir=cache_dir, revision=revision)
+    return str(path)
+
+
+register_cloud_downloader(['huggingface', 'hf'], _download_huggingface)
+register_cloud_downloader(['modelscope', 'ms'], _download_modelscope)
 
 
 class DownloadModel(api.UsageModel):
