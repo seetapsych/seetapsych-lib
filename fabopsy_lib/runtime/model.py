@@ -304,7 +304,7 @@ def exists_model(model: schema.Model, *, cache_dir: str = None) -> bool:
 
 
 def test():
-    cache_dir = 'cache'
+    cache_dir = '.cache'
 
     download_model = DownloadModel(schema.DownloadModel(
         index='LICENSE',
