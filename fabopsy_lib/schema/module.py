@@ -68,7 +68,7 @@ class Entry(BaseModel):
 
 class CloudModel(BaseModel):
     host: str = Field(
-        examples=['modelscope', 'huggingface'],
+        examples=['modelscope', 'huggingface', 'aistudio'],
         description='Cloud host for downloading the model')
     model_id: str = Field(
         description='Model ID in the hosting repository')

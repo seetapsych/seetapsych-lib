@@ -224,8 +224,28 @@ def _download_modelscope(cfg: schema.CloudModel, cache_dir: str) -> str:
     return str(path)
 
 
+def _download_aistudio(cfg: schema.CloudModel, cache_dir: str) -> str:
+    try:
+        from aistudio_sdk.snapshot_download import snapshot_download
+    except ImportError as e:
+        raise RuntimeError('aistudio-sdk is required for CloudModel host=aistudio') from e
+    revision = (cfg.revision or '').strip() or None
+    kwargs = {
+        'repo_id': cfg.model_id,
+        'revision': revision or 'master',
+        'local_dir': cache_dir,
+    }
+    if cfg.allow_patterns is not None:
+        kwargs['allow_patterns'] = cfg.allow_patterns
+    if cfg.ignore_patterns is not None:
+        kwargs['ignore_patterns'] = cfg.ignore_patterns
+    path = snapshot_download(**kwargs)
+    return str(path)
+
+
 register_cloud_downloader(['huggingface', 'hf'], _download_huggingface)
 register_cloud_downloader(['modelscope', 'ms'], _download_modelscope)
+register_cloud_downloader(['aistudio'], _download_aistudio)
 
 
 class DownloadModel(api.UsageModel):
