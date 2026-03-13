@@ -37,6 +37,7 @@ class SessionState(object):
     factory: Factory | None = None
     pipeline: Pipeline | None = None
     runner: Runner | None = None
+    runner_signature: str = ''
 
     event: str = ''
     error: BaseException | str | None = None
@@ -44,12 +45,19 @@ class SessionState(object):
     search_package: str = ''
     package_uid: str = ''
     satisfied: bool = False
-    unsatisfaction: UnsatisfactionConfig | None = False
+    unsatisfaction: UnsatisfactionConfig | None = None
 
     file: Any = None
     reports: list[dict[str, Any]] = field(default_factory=lambda: [])
     export_json: str = ''
     export_csv: str = ''
+
+    parameter_search: str = ''
+    parameter_show_description: bool = True
+    parameter_expand_all: bool = False
+
+    batch_grouped: list[dict[str, Any]] = field(default_factory=lambda: [])
+    batch_rows: list[dict[str, Any]] = field(default_factory=lambda: [])
 
 
 def init_session_state(init: SessionState) -> SessionState:
@@ -125,16 +133,8 @@ def page_start():
 
         for package in pipeline_packages:
             with st.container(border=True):
-                with st.container(horizontal=True):
-                    st.markdown(f"**{package.name}** `v{package.version}`")
-                    for attr in package.provides:
-                        st.badge(attr)
-                models = pipeline.get_models(package.uid)
-                for model in models:
-                    if model.usage:
-                        st.markdown(f"- **{model.usage}** {model.name} `v{model.version}`")
-                    else:
-                        st.markdown(f"- {model.name}` v{model.version}`")
+                render_package_header(package)
+                render_package_models(pipeline, package)
 
         problem = pipeline.problem()
 
@@ -195,10 +195,11 @@ def parameter_string(pipeline: Pipeline, package_uid: str, param: schema.Paramet
 
 def parameter_selection(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
-    index: int | None = param.selection.index(param.value)
-    if index < 0:
-        index = None
-    value = st.selectbox(key=key, label=param.name, options=param.selection, index=index)
+    try:
+        index = param.selection.index(param.value)
+    except Exception:
+        index = 0 if param.selection else 0
+    value = st.selectbox(key=key, label=param.name, options=param.selection, index=index if param.selection else 0)
     if value is not None and value != param.value:
         update = {param.name: str(value)}
         pipeline.set_parameters(package_uid, update)
@@ -293,7 +294,7 @@ def parameter_object(pipeline: Pipeline, package_uid: str, param: schema.Paramet
             st.error(f'Invalid {param.name}: {value}')
 
 
-def component_parameter(package_uid: str, param: schema.Parameter):
+def component_parameter(package_uid: str, param: schema.Parameter, *, show_description: bool = True):
     pipeline = session_state.pipeline
     parameter_generators = {
         schema.ParameterType.Integer: parameter_integer,
@@ -307,12 +308,35 @@ def component_parameter(package_uid: str, param: schema.Parameter):
         schema.ParameterType.Object: parameter_object,
     }
     with st.container():
-        st.markdown(f'> {param.description}')
+        if show_description and param.description:
+            st.markdown(f'> {param.description}')
         generator = parameter_generators.get(param.type, None)
         if generator is not None:
             generator(pipeline, package_uid, param)
         else:
             st.markdown(f'**{param.name}**: {param.value}')
+
+def infer_parameter_group(name: str) -> str:
+    for sep in ('.', ':', '/'):
+        if sep in name:
+            return name.split(sep, 1)[0] or 'General'
+    if '_' in name:
+        return name.split('_', 1)[0] or 'General'
+    return 'General'
+
+def render_package_header(package: schema.Package):
+    with st.container(horizontal=True):
+        st.markdown(f"**{package.name}** `v{package.version}`")
+        for attr in package.provides:
+            st.badge(attr)
+
+def render_package_models(pipeline: Pipeline, package: schema.Package):
+    models = pipeline.get_models(package.uid)
+    for model in models:
+        if model.usage:
+            st.markdown(f"- **{model.usage}** {model.name} `v{model.version}`")
+        else:
+            st.markdown(f"- {model.name} `v{model.version}`")
 
 
 def page_setting():
@@ -333,16 +357,8 @@ def page_setting():
                 edit_package = package
 
             with st.container(border=True):
-                with st.container(horizontal=True):
-                    st.markdown(f"**{package.name}** `v{package.version}`")
-                    for attr in package.provides:
-                        st.badge(attr)
-                models = pipeline.get_models(package.uid)
-                for model in models:
-                    if model.usage:
-                        st.markdown(f"- **{model.usage}** {model.name} `v{model.version}`")
-                    else:
-                        st.markdown(f"- {model.name}` v{model.version}`")
+                render_package_header(package)
+                render_package_models(pipeline, package)
                 with st.container(horizontal=True):
                     if st.button('Edit', key=f'edit:{package.uid}'):
                         session_state.package_uid = package.uid
@@ -372,14 +388,58 @@ def page_setting():
             for p in edit_package.parameters:
                 config_parameter = pipeline.get_parameter(edit_package.uid, p.name)
                 if config_parameter is None:
-                    parameters.append(p.model_copy())
+                    parameters.append(p.model_copy(deep=True))
                 else:
-                    parameters.append(p.model_copy(update={'value': config_parameter.value}))
+                    parameters.append(p.model_copy(deep=True, update={'value': config_parameter.value}))
 
-            # show parameters
             with st.container():
+                search_value = st.text_input(
+                    'Search parameters',
+                    value=session_state.parameter_search,
+                    key='parameter_search',
+                    label_visibility='collapsed',
+                    placeholder='Search parameters...',
+                )
+                show_description = st.checkbox(
+                    'Show descriptions',
+                    value=session_state.parameter_show_description,
+                    key='parameter_show_description',
+                )
+                expand_all = st.checkbox(
+                    'Expand all groups',
+                    value=session_state.parameter_expand_all,
+                    key='parameter_expand_all',
+                )
+
+                if search_value:
+                    s = search_value.strip().lower()
+                    parameters = [
+                        p for p in parameters
+                        if (p.name and s in p.name.lower()) or (p.description and s in p.description.lower())
+                    ]
+
+                groups: dict[str, list[schema.Parameter]] = {}
                 for p in parameters:
-                    component_parameter(edit_package.uid, p)
+                    group = infer_parameter_group(p.name)
+                    groups.setdefault(group, []).append(p)
+
+                if not groups:
+                    st.info('No parameters matched.')
+                else:
+                    def group_sort_key(g: str) -> tuple[int, str]:
+                        return (0 if g == 'General' else 1, g.lower())
+
+                    for group in sorted(groups.keys(), key=group_sort_key):
+                        group_parameters = sorted(
+                            groups[group],
+                            key=lambda p: (p.name or '').lower(),
+                        )
+                        with st.expander(
+                            f'{group} ({len(group_parameters)})',
+                            expanded=expand_all or len(groups) == 1,
+                        ):
+                            for p in group_parameters:
+                                component_parameter(edit_package.uid, p, show_description=show_description)
 
 
 def page_install():
@@ -399,16 +459,8 @@ def page_install():
 
         for package in pipeline.packages:
             with st.container(border=True):
-                with st.container(horizontal=True):
-                    st.markdown(f"**{package.name}** `v{package.version}`")
-                    for attr in package.provides:
-                        st.badge(attr)
-                models = pipeline.get_models(package.uid)
-                for model in models:
-                    if model.usage:
-                        st.markdown(f"- **{model.usage}** {model.name} `v{model.version}`")
-                    else:
-                        st.markdown(f"- {model.name}` v{model.version}`")
+                render_package_header(package)
+                render_package_models(pipeline, package)
 
         with st.container(horizontal=True):
             if st.button('Prev', disabled=bool(event)):
@@ -497,7 +549,7 @@ def run_image(runner: Runner, file: UploadedFile):
 
     if not reports:
         with st.spinner('Open image...', show_time=True):
-            image_bytes = file.read()
+            image_bytes = read_uploaded_file_bytes(file)
             image = cv2.imdecode(numpy.frombuffer(image_bytes, numpy.uint8), cv2.IMREAD_COLOR)
 
         with st.spinner('Running...', show_time=True):
@@ -573,9 +625,17 @@ class CacheFile(object):
 
         path = self.__path
         file = self.__file
+        try:
+            file.seek(0)
+        except Exception:
+            pass
         with open(path, "wb") as f:
             while buf := file.read(1024 * 1024):
                 f.write(buf)
+        try:
+            file.seek(0)
+        except Exception:
+            pass
 
     def __enter__(self):
         if self.__auto_save:
@@ -634,7 +694,8 @@ def run_video(runner: Runner, file: UploadedFile):
                     except Exception as e:
                         session_state.error = e
                         st.rerun()
-                    progress.progress(i / n, text=f'[{i}/{n}]')
+                    ratio = (i / n) if n > 0 else 0.0
+                    progress.progress(ratio, text=f'[{i}/{n}]')
 
         session_state.reports = reports
 
@@ -671,6 +732,56 @@ def run_video(runner: Runner, file: UploadedFile):
 
     st.code(json.dumps(reports, indent=2), language='json')
 
+def read_uploaded_file_bytes(file: UploadedFile) -> bytes:
+    if hasattr(file, 'getvalue'):
+        return file.getvalue()
+    try:
+        file.seek(0)
+    except Exception:
+        pass
+    data = file.read()
+    try:
+        file.seek(0)
+    except Exception:
+        pass
+    return data
+
+def pipeline_signature(pipeline: Pipeline, *, cache_dir: str) -> str:
+    payload = {
+        'cache_dir': cache_dir or '',
+        'pipeline': pipeline.config.model_dump(mode='json'),
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+
+def make_report_row(
+        report: dict[str, Any],
+        *,
+        file_name: str,
+        file_type: str,
+        kind: str,
+        item_index: int,
+        frame_index: int | None = None,
+        timestamp: float | None = None,
+) -> dict[str, Any]:
+    meta: dict[str, Any] = {
+        'file_name': file_name,
+        'file_type': file_type,
+        'kind': kind,
+        'item_index': item_index,
+    }
+    if frame_index is not None:
+        meta['frame_index'] = frame_index
+    if timestamp is not None:
+        meta['timestamp'] = timestamp
+    return {'__meta__': meta, **(report or {})}
+
+def process_image_file(runner: Runner, file: UploadedFile) -> dict[str, Any]:
+    image_bytes = read_uploaded_file_bytes(file)
+    image = cv2.imdecode(numpy.frombuffer(image_bytes, numpy.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise RuntimeError(f'Invalid image: {file.name}')
+    return runner.run({'default': image})
+
 
 def page_run():
     st.title('Run')
@@ -678,40 +789,230 @@ def page_run():
     runner = session_state.runner
     pipeline = session_state.pipeline
     cache_dir = session_state.cache_dir
+    upload_dir = session_state.upload_dir
     error = session_state.error
 
     event = session_state.event
     busy = st.empty()
 
+    desired_signature = pipeline_signature(pipeline, cache_dir=cache_dir)
+    if (
+            runner is not None and
+            session_state.runner_signature and
+            session_state.runner_signature != desired_signature and
+            event != 'build'
+    ):
+        try:
+            runner.dispose()
+        except Exception:
+            pass
+        session_state.runner = None
+        session_state.runner_signature = ''
+        session_state.reports = []
+        session_state.batch_grouped = []
+        session_state.batch_rows = []
+        session_state.export_json = ''
+        session_state.export_csv = ''
+        session_state.error = None
+        session_state.event = 'build'
+        st.rerun()
+
     if runner is not None:
         st.success('Ready to run.')
 
-        file = st.file_uploader(
-            'Select image/video',
+        files = st.file_uploader(
+            'Select image/video(s)',
             key='upload_input',
-            type=['jpg', 'png', 'bmp', 'wav', 'mp4', 'avi', 'wmv'],
-            max_upload_size=256,
+            type=['jpg', 'png', 'bmp', 'mp4', 'avi', 'wmv'],
+            accept_multiple_files=True,
         )
-        if file is not None:
-            if session_state.file != file.file_id:
-                session_state.reports = []
-                session_state.export_json = ''
-                session_state.export_csv = ''
+        signature = '|'.join([getattr(f, 'file_id', '') or f.name for f in files]) if files else ''
+        if signature and session_state.file != signature:
+            session_state.reports = []
+            session_state.batch_grouped = []
+            session_state.batch_rows = []
+            session_state.export_json = ''
+            session_state.export_csv = ''
+            session_state.error = None
+            session_state.file = signature
 
-            if file.type.startswith('image/'):
-                st.image(file)
-                run_image(runner, file)
-            elif file.type.startswith('video/'):
-                st.video(file)
-                run_video(runner, file)
+        if files:
+            if len(files) == 1:
+                file = files[0]
+                if file.type.startswith('image/'):
+                    st.image(file)
+                    run_image(runner, file)
+                elif file.type.startswith('video/'):
+                    st.video(file)
+                    run_video(runner, file)
+            else:
+                st.write(f'{len(files)} files selected.')
+                if not session_state.batch_grouped:
+                    if st.button('Run batch', disabled=bool(event)):
+                        session_state.event = 'run_batch'
+                        st.rerun()
+                else:
+                    st.success(f'Batch finished. Files: {len(session_state.batch_grouped)}, Rows: {len(session_state.batch_rows)}')
 
-            session_state.file = file.file_id
+                    def to_json_grouped() -> str:
+                        content = session_state.export_json
+                        if not content:
+                            content = json.dumps(session_state.batch_grouped, ensure_ascii=False, indent=2)
+                            session_state.export_json = content
+                        return content
+
+                    def to_csv_rows() -> str:
+                        content = session_state.export_csv
+                        if not content:
+                            content = list2csv(session_state.batch_rows)
+                            session_state.export_csv = content
+                        return content
+
+                    with st.container(horizontal=True):
+                        st.download_button(
+                            label='Download JSON',
+                            data=to_json_grouped(),
+                            file_name='reports.json',
+                            mime='text/json',
+                            key='download_json_batch',
+                        )
+                        st.download_button(
+                            label='Download CSV',
+                            data=to_csv_rows(),
+                            file_name='reports.csv',
+                            mime='text/csv',
+                            key='download_csv_batch',
+                        )
+
+                    for item in session_state.batch_grouped:
+                        file_name = item.get('file_name', '<unknown>')
+                        kind = item.get('kind', '')
+                        if 'error' in item:
+                            title = f'{file_name} ({kind})'
+                        else:
+                            count = item.get('count', 1)
+                            title = f'{file_name} ({kind}, {count})'
+                        with st.expander(title, expanded=False):
+                            if 'error' in item:
+                                st.error(str(item['error']))
+                            elif kind == 'image':
+                                st.json(item.get('report', {}))
+                            elif kind == 'video':
+                                reports = item.get('reports', [])
+                                if reports:
+                                    st.json(reports[0])
+                                else:
+                                    st.info('No frames processed.')
+
+        if event == 'run_batch':
+            if not files or len(files) <= 1:
+                session_state.event = ''
+                st.rerun()
+
+            with busy.spinner('Running batch...', show_time=True):
+                overall = st.progress(0, text='Preparing...')
+                grouped: list[dict[str, Any]] = []
+                rows: list[dict[str, Any]] = []
+
+                total = len(files)
+                for item_index, f in enumerate(files):
+                    overall.progress(item_index / total, text=f'[{item_index + 1}/{total}] {f.name}')
+                    try:
+                        if f.type.startswith('image/'):
+                            report = process_image_file(runner, f)
+                            grouped.append({
+                                'file_name': f.name,
+                                'file_type': f.type,
+                                'kind': 'image',
+                                'count': 1,
+                                'report': report,
+                            })
+                            rows.append(make_report_row(
+                                report,
+                                file_name=f.name,
+                                file_type=f.type,
+                                kind='image',
+                                item_index=item_index,
+                            ))
+                        elif f.type.startswith('video/'):
+                            progress_slot = st.empty()
+                            progress = progress_slot.progress(0, text='[0/?]')
+                            with CacheFile(f, temp_dir=upload_dir) as temp:
+                                temp.save()
+                                with ReleaseCapture(temp.path) as capture:
+                                    if not capture.isOpened():
+                                        raise RuntimeError(f'Unable to open video: {f.name}')
+
+                                    n = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+                                    i = 0
+                                    video_reports: list[dict[str, Any]] = []
+                                    while capture.isOpened():
+                                        ok = capture.grab()
+                                        if not ok:
+                                            break
+                                        ok, image = capture.retrieve()
+                                        if not ok:
+                                            break
+                                        image = cast(numpy.ndarray, image)
+                                        i += 1
+                                        timestamp = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
+                                        report = runner.run({'default': image}, timestamp=timestamp)
+                                        video_reports.append(report)
+                                        ratio = (i / n) if n > 0 else 0.0
+                                        progress.progress(ratio, text=f'[{i}/{n}]')
+                            progress_slot.empty()
+
+                            grouped.append({
+                                'file_name': f.name,
+                                'file_type': f.type,
+                                'kind': 'video',
+                                'count': len(video_reports),
+                                'reports': video_reports,
+                            })
+                            for frame_index, report in enumerate(video_reports):
+                                rows.append(make_report_row(
+                                    report,
+                                    file_name=f.name,
+                                    file_type=f.type,
+                                    kind='video',
+                                    item_index=item_index,
+                                    frame_index=frame_index,
+                                ))
+                        else:
+                            grouped.append({
+                                'file_name': f.name,
+                                'file_type': f.type,
+                                'kind': 'unknown',
+                                'error': f'Unsupported file type: {f.type}',
+                            })
+                    except Exception as e:
+                        grouped.append({
+                            'file_name': f.name,
+                            'file_type': f.type,
+                            'kind': 'error',
+                            'error': str(e),
+                        })
+
+                overall.progress(1.0, text='Done')
+                session_state.batch_grouped = grouped
+                session_state.batch_rows = rows
+                session_state.event = ''
+                st.rerun()
 
     if event == 'build':
         with busy.spinner('Building...', show_time=True):
             try:
-                session_state.runner = Runner(pipeline, device=None, cache_dir=cache_dir)
-                session_state.error = None
+                if session_state.runner is not None and session_state.runner_signature == desired_signature:
+                    session_state.error = None
+                else:
+                    if session_state.runner is not None:
+                        try:
+                            session_state.runner.dispose()
+                        except Exception:
+                            pass
+                    session_state.runner = Runner(pipeline, device=None, cache_dir=cache_dir)
+                    session_state.runner_signature = desired_signature
+                    session_state.error = None
             except Exception as e:
                 session_state.error = e
             finally:
@@ -725,7 +1026,7 @@ def page_run():
             st.error(str(error))
 
 
-@st.cache_data(show_spinner=True)
+@st.cache_resource(show_spinner=True)
 def load_factory(
         dirs: list[str] = None, files: list[str] = None, urls: list[str] = None,
         disable_builtin: bool = False
