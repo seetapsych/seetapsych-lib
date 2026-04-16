@@ -27,7 +27,11 @@ __all__ = [
 Uid = str
 
 
-class Entity(BaseModel):
+class CustomBaseModel(BaseModel):
+    pass
+
+
+class Entity(CustomBaseModel):
     uid: Uid = Field(
         default_factory=lambda: str(uuid.uuid4()),
         description='Unique identifier. Provide a unique string, or a UUID will be generated.'
@@ -52,7 +56,7 @@ class Entity(BaseModel):
         return int(match[1] or 0), int(match[2] or 0), int(match[3] or 0), match[4] or '', match[5] or ''
 
 
-class Entry(BaseModel):
+class Entry(CustomBaseModel):
     package: str | None = Field(
         None,
         examples=['x.y.z'],
@@ -66,7 +70,7 @@ class Entry(BaseModel):
     kwargs: dict[str, Any] = Field({})
 
 
-class CloudModel(BaseModel):
+class CloudModel(CustomBaseModel):
     host: str = Field(
         examples=['modelscope', 'huggingface', 'aistudio'],
         description='Cloud host for downloading the model')
@@ -89,7 +93,7 @@ class CloudModel(BaseModel):
         description='Optional index file/dir path for existence check, relative to the downloaded directory')
 
 
-class DownloadModel(BaseModel):
+class DownloadModel(CustomBaseModel):
     index: str = Field(
         description='Output filename used as the model cache index, for existence checks.')
     url: str = Field(
@@ -97,6 +101,9 @@ class DownloadModel(BaseModel):
     md5: str = Field(
         '',
         description='MD5 checksum of the downloaded model file')
+    sha256: str = Field(
+        '',
+        description='SHA256 checksum of the downloaded model file')
     unpack: bool = Field(
         False,
         description='Whether the downloaded file is compressed. If true, it will be decompressed automatically.')
@@ -128,6 +135,12 @@ class Model(Entity):
         None,
         description='Python entry for loading this model. The entry should return @ref fabopsy_lib.api.Model')
 
+    metadata: dict[str, Any] = Field(
+        {},
+        description='Metadata is used to describe a model, '
+                    'typically indicating the necessary backbone network, '
+                    'pre-processing, and other parameters of the model.')
+
     @model_validator(mode='after')
     def check_not_all_none(self):
         if all(x is None for x in [self.cloud, self.download, self.entry]):
@@ -147,7 +160,7 @@ class ParameterType(str, Enum):
     Object = 'object'
 
 
-class Parameter(BaseModel):
+class Parameter(CustomBaseModel):
     name: str
     type: ParameterType
     description: str = Field('')
@@ -176,7 +189,7 @@ class ModuleSpec(Entity):
         description='Python package requirements')
 
 
-class Module(BaseModel):
+class Module(CustomBaseModel):
     version: Literal['1.0'] = Field(
         '1.0',
         examples=['1.0'],

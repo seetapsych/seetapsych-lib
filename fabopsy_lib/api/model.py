@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 __all__ = [
     'Model',
@@ -9,6 +10,14 @@ __all__ = [
 
 
 class Model(ABC):
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """
+        Get model's metadata.
+        :return:
+        """
+        return {}
+
     @abstractmethod
     def exists(self) -> bool:
         """

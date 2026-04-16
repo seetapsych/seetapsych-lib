@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 
+import os
 import sys
 import copy
+import shutil
 import importlib
 import subprocess
 import ensurepip
 import urllib.parse
 from importlib.metadata import version, PackageNotFoundError
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
 from packaging.requirements import Requirement
 
@@ -23,6 +25,95 @@ __all__ = [
     'call_entry',
     'load_package',
 ]
+
+
+def safe_which(
+        cmd: Union[str, os.PathLike],
+        path: Union[str, os.PathLike] = None
+) -> str | None:
+    """
+    Safely wrap shutil.which to support both str and PathLike inputs.
+
+    This avoids issues on Windows with Python < 3.12 where PathLike
+    arguments may fail or return None.
+    """
+    cmd_str = os.fspath(cmd)  # Convert PathLike -> str safely
+    path_str = os.fspath(path) if path is not None else None
+    return shutil.which(cmd_str, path=path_str)
+
+
+def find_uv() -> str | None:
+    """
+    Locate the 'uv' executable in a cross-platform and robust way.
+
+    Steps:
+    1. Search in PATH using shutil.which
+    2. Handle Windows-specific executable suffixes
+    3. Fallback to common installation directories
+    """
+    # Step 1: standard lookup
+    uv_path = safe_which("uv")
+    if uv_path:
+        return uv_path
+
+    # Step 2: Windows-specific fallback for executable extensions
+    if os.name == "nt":
+        for name in ["uv.exe", "uv.cmd", "uv.bat"]:
+            uv_path = safe_which(name)
+            if uv_path:
+                return uv_path
+
+    # Step 3: common install locations (Linux/macOS)
+    common_paths = [
+        os.path.expanduser("~/.local/bin/uv"),
+        os.path.expanduser("~/bin/uv"),
+        "/usr/local/bin/uv",
+        "/opt/homebrew/bin/uv",  # macOS (Apple Silicon)
+    ]
+
+    for path in common_paths:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+
+    return None
+
+
+def get_uv_version(uv_path: str) -> str | None:
+    """
+    Get the version of uv by calling 'uv --version'.
+
+    Returns:
+        Version string if successful, otherwise None.
+    """
+    try:
+        result = subprocess.run(
+            [uv_path, "--version"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except Exception:
+        return None
+
+
+def get_pip_version() -> str | None:
+    """
+    Get the version of pip by calling 'python -m pip --version'.
+
+    Returns:
+        Version string if successful, otherwise None.
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', "--version"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except Exception:
+        return None
 
 
 def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
@@ -43,18 +134,31 @@ def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
     return unsatisfied
 
 
-def install_requirements(module: schema.ModuleSpec, *, index_url: str = None, trusted_host: str | bool = None):
-    unsatisfied = unsatisfied_requirements(module)
-    if not unsatisfied:
-        return
+def package_manager() -> list[str]:
+    # check uv
+    uv_exe = find_uv()
+    if uv_exe:
+        uv_version = get_uv_version(uv_exe)
+        logger.info(f"Using package manager: {uv_version}")
+        return [uv_exe, "pip"]
 
+    # check pip
     try:
         import pip
     except ImportError:
         logger.info('Install pip via ensurepip')
         ensurepip.bootstrap()
 
-    cmd = [sys.executable, '-m', 'pip', 'install'] + unsatisfied
+    logger.info(f"Using package manager: {get_pip_version()}")
+    return [sys.executable, '-m', 'pip']
+
+
+def install_requirements(module: schema.ModuleSpec, *, index_url: str = None, trusted_host: str | bool = None):
+    unsatisfied = unsatisfied_requirements(module)
+    if not unsatisfied:
+        return
+
+    cmd = [*package_manager(), 'install'] + unsatisfied
     if index_url:
         cmd += ['--index-url', index_url]
     if trusted_host:

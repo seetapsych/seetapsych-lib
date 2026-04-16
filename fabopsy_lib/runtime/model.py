@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
+import copy
 import json
 import re
 import os
-from typing import Callable
+from typing import Callable, Any
 
 from fabopsy_lib import api
 from fabopsy_lib import schema
@@ -56,13 +57,20 @@ def _get_cloud_downloader(host: str) -> Callable[[schema.CloudModel, str], str] 
 
 
 class WrapperModel(api.UsageModel):
-    def __init__(self, model: api.Model, *, usage: str = ''):
+    def __init__(self, model: api.Model, *, usage: str = '', metadata: dict[str, Any] = None):
         self.__usage = usage
         self.__model = model
+        self.__metadata = {} if metadata is None else copy.copy(metadata)
+
+        self.__metadata.update(model.metadata or {})
 
     @property
     def usage(self) -> str:
         return self.__usage
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self.__metadata
 
     def exists(self) -> bool:
         return self.__model.exists()
@@ -72,13 +80,19 @@ class WrapperModel(api.UsageModel):
 
 
 class LocalModel(api.UsageModel):
-    def __init__(self, path: str, *, usage: str = ''):
+    def __init__(self, path: str, *,
+                 usage: str = '', metadata: dict[str, Any] = None):
         self.__usage = usage
         self.__path = path
+        self.__metadata = {} if metadata is None else metadata
 
     @property
     def usage(self) -> str:
         return self.__usage
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self.__metadata
 
     def exists(self) -> bool:
         return os.path.exists(self.__path)
@@ -88,14 +102,20 @@ class LocalModel(api.UsageModel):
 
 
 class CloudModel(api.UsageModel):
-    def __init__(self, cfg: schema.CloudModel, *, usage: str = '', cache_dir: str = None):
+    def __init__(self, cfg: schema.CloudModel, *,
+                 usage: str = '', cache_dir: str = None, metadata: dict[str, Any] = None):
         self.__cfg = cfg
         self.__usage = usage
         self.__cache_dir = cache_dir
+        self.__metadata = {} if metadata is None else metadata
 
     @property
     def usage(self) -> str:
         return self.__usage
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self.__metadata
 
     def __marker_path(self) -> str:
         return os.path.join(self.__cache_dir, '.fabopsy_cloud.json')
@@ -249,14 +269,20 @@ register_cloud_downloader(['aistudio'], _download_aistudio)
 
 
 class DownloadModel(api.UsageModel):
-    def __init__(self, cfg: schema.DownloadModel, *, usage: str = '', cache_dir: str = None):
+    def __init__(self, cfg: schema.DownloadModel, *,
+                 usage: str = '', cache_dir: str = None, metadata: dict[str, Any] = None):
         self.__cfg = cfg
         self.__usage = usage
         self.__cache_dir = cache_dir
+        self.__metadata = {} if metadata is None else metadata
 
     @property
     def usage(self) -> str:
         return self.__usage
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self.__metadata
 
     def exists(self) -> bool:
         cache_index = os.path.join(self.__cache_dir, self.__cfg.index)
@@ -270,7 +296,11 @@ class DownloadModel(api.UsageModel):
         os.makedirs(self.__cache_dir, exist_ok=True)
         if self.__cfg.unpack:
             # download compressed file and upack it
-            compressed_file = download_file(self.__cfg.url, self.__cache_dir, md5=self.__cfg.md5)
+            compressed_file = download_file(
+                self.__cfg.url, self.__cache_dir,
+                md5=self.__cfg.md5,
+                sha256=self.__cfg.sha256,
+            )
             with defer(lambda: os.remove(compressed_file)):
                 extract_file(compressed_file, self.__cache_dir)
         else:
@@ -285,33 +315,39 @@ class DownloadModel(api.UsageModel):
 
 def build_model_with_cloud(
         cloud: schema.CloudModel, *,
-        usage: str = '', cache_dir: str = None) -> api.UsageModel:
-    return CloudModel(cloud, usage=usage, cache_dir=cache_dir)
+        usage: str = '', cache_dir: str = None, metadata: dict[str, Any] = None) -> api.UsageModel:
+    return CloudModel(cloud, usage=usage, cache_dir=cache_dir, metadata=metadata)
 
 
 def build_model_with_download(
         download: schema.DownloadModel, *,
-        usage: str = '', cache_dir: str = None) -> api.UsageModel:
-    return DownloadModel(download, usage=usage, cache_dir=cache_dir)
+        usage: str = '', cache_dir: str = None, metadata: dict[str, Any] = None) -> api.UsageModel:
+    return DownloadModel(download, usage=usage, cache_dir=cache_dir, metadata=metadata)
 
 
 def build_model_with_entry(
         entry: schema.Entry, *,
-        usage: str = '', cache_dir: str = None) -> api.UsageModel:
-    return WrapperModel(call_entry(entry, {'cache_dir': cache_dir}), usage=usage)
+        usage: str = '', cache_dir: str = None, metadata: dict[str, Any] = None) -> api.UsageModel:
+    return WrapperModel(call_entry(entry, {'cache_dir': cache_dir}), usage=usage, metadata=metadata)
 
 
 def build_model(model: schema.Model, *, cache_dir: str = None) -> api.UsageModel:
     model_dir = entity_cache_dir(model, cache_dir=cache_dir)
 
+    kwargs = {
+        'usage': model.usage,
+        'cache_dir': model_dir,
+        'metadata': model.metadata
+    }
+
     if model.entry is not None:
-        return build_model_with_entry(model.entry, usage=model.usage, cache_dir=model_dir)
+        return build_model_with_entry(model.entry, **kwargs)
 
     if model.download is not None:
-        return build_model_with_download(model.download, usage=model.usage, cache_dir=model_dir)
+        return build_model_with_download(model.download, **kwargs)
 
     if model.cloud is not None:
-        return build_model_with_cloud(model.cloud, usage=model.usage, cache_dir=model_dir)
+        return build_model_with_cloud(model.cloud, **kwargs)
 
     raise RuntimeError('The model configuration must at least provide cloud, download, or entry.')
 
@@ -331,20 +367,22 @@ def test():
         url='https://raw.githubusercontent.com/python/cpython/3.11/LICENSE',
         md5='fcf6b249c2641540219a727f35d8d2c2',
         **{}),
-        cache_dir=cache_dir
+        cache_dir=cache_dir,
+        metadata={'foo': 'bar'},
     )
 
-    print(download_model.exists(), download_model.cache())
+    print(download_model.exists(), download_model.cache(), download_model.metadata)
 
     download_model = DownloadModel(schema.DownloadModel(
         index='font-consolas-ttf-1.2/fonts/Consolas.ttf',
         url='https://codeload.github.com/misuchiru03/font-consolas-ttf/zip/refs/tags/1.2',
         md5='999642B83F40AFE277C40EF8A4CB653E',
         unpack=True),
-        cache_dir=cache_dir
+        cache_dir=cache_dir,
+        metadata={'foo': 'bar'},
     )
 
-    print(download_model.exists(), download_model.cache())
+    print(download_model.exists(), download_model.cache(), download_model.metadata)
 
 
 if __name__ == '__main__':
