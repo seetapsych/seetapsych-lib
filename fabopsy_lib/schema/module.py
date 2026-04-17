@@ -153,6 +153,7 @@ class ParameterType(str, Enum):
     Number = 'number'
     String = 'string'
     Selection = 'selection'
+    Boolean = 'boolean'
     IntegerArray = 'integer[]'
     NumberArray = 'number[]'
     StringArray = 'string[]'
@@ -165,7 +166,7 @@ class Parameter(CustomBaseModel):
     type: ParameterType
     description: str = Field('')
 
-    value: None | int | float | str | list[int] | list[float] | list[str] | dict[str, Any] = Field(None)
+    value: None | int | float | str | bool | list[int] | list[float] | list[str] | dict[str, Any] = Field(None)
     selection: list[str] = Field(None)
 
 
@@ -183,10 +184,22 @@ class Package(Entity):
         description='Available models that can be switched as needed')
 
 
+class GitRef(CustomBaseModel):
+    name: str = Field(description='Package name to check if this package has been installed')
+    repo: str = Field(description='Git repo address to download package')
+    require: str | None = Field(None, description='Version to check package like: >=1.3,<3')
+    revision: str | None = Field(None, description='Change the revision, branch or commit to setup')
+    subdir: str | None = Field(None, description='Subdir in git source to setup')
+
+
 class ModuleSpec(Entity):
     requirements: list[str] = Field(
         [],
         description='Python package requirements')
+
+    refs: list[GitRef] = Field(
+        [],
+        description='Python package to install from git')
 
 
 class Module(CustomBaseModel):

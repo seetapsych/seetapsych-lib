@@ -118,6 +118,7 @@ def get_pip_version() -> str | None:
 
 def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
     unsatisfied: list[str] = []
+
     for req_str in module.requirements:
         try:
             req = Requirement(req_str)
@@ -131,6 +132,28 @@ def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
             msg = f'Unable to check satisfaction {req_str}: {e}'
             logger.error(msg)
             raise RuntimeError(msg) from e
+
+    for ref in module.refs:
+        req_str = f'{ref.name}{ref.require}' if ref.require else ref.name
+        req_git = f'{ref.name} @ git+{ref.repo}'
+        if ref.revision:
+            req_git += f'@{ref.revision}'
+        if ref.subdir:
+            req_git += f'#subdirectory={ref.subdir}'
+
+        try:
+            req = Requirement(req_str)
+            pkg_name = req.name
+            installed_ver = version(pkg_name)
+            if not req.specifier.contains(installed_ver):
+                unsatisfied.append(req_git)
+        except PackageNotFoundError:
+            unsatisfied.append(req_git)
+        except Exception as e:
+            msg = f'Unable to check satisfaction {req_str}: {e}'
+            logger.error(msg)
+            raise RuntimeError(msg) from e
+
     return unsatisfied
 
 
