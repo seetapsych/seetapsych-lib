@@ -234,7 +234,17 @@ class Pipeline(object):
             package_models.append(model.model_copy(deep=True))
             return True
 
-        return False
+    def _remove_model(self, package_uid: str, model_uid: str) -> bool:
+        if package_uid not in self.__config.models:
+            return False
+
+        package_models = self.__config.models[package_uid]
+        model_index: int | None = next((i for i, m in enumerate(package_models) if m.uid == model_uid), None)
+        if model_index is None:
+            return False
+
+        del package_models[model_index]
+        return True
 
     def _set_parameter(self, package_uid: str, parameter: schema.Parameter | None):
         if parameter is None:
@@ -325,6 +335,13 @@ class Pipeline(object):
         for model in found_models:
             if self._add_model(package_uid, model):
                 logger.debug(f'Set model {package_uid} {model.uid}')
+
+    def remove_model(self, package_uid: schema.Uid, model_uid: schema.Uid):
+        if self.__factory is None:
+            raise FactoryRequired
+
+        if self._remove_model(package_uid, model_uid):
+            logger.debug(f'Remove model {package_uid} {model_uid}')
 
     def set_parameters(self, package_uid: schema.Uid, values: dict[str, Any]):
         if self.__factory is None:
@@ -583,7 +600,7 @@ class Pipeline(object):
             attributes=problem_attributes,
         )
 
-    def solve(self) -> SolvedConfig | None:
+    def solve(self, ignore_models: bool = False) -> SolvedConfig | None:
         """
         For modules loaded through factory, check for missing attributes or package dependencies.
         Supplement models that have not been selected.
@@ -651,6 +668,11 @@ class Pipeline(object):
                 logger.info(f'Solve required module [{module_spec.name}]({module_spec.uid})'
                             f' for package [{package.name}]({package.uid})')
                 solved.add_modules.append(factory_module.module.model_copy(deep=True))
+
+        # ignore models
+        if ignore_models:
+            solved.unsolved = unsolved if unsolved else None
+            return solved if solved else None
 
         # solve models
         for package in problem.missing_model_packages:

@@ -43,6 +43,7 @@ class SessionState(object):
     error: BaseException | str | None = None
 
     search_package: str = ''
+    search_model: str = ''
     package_uid: str = ''
     satisfied: bool = False
     unsatisfaction: UnsatisfactionConfig | None = None
@@ -77,7 +78,21 @@ def fuzzy_match_package(package: schema.Package, pattern: str):
     def match(s: str | None):
         return pattern in s.lower() if s else False
 
-    return any(match(s) for s in (package.name, package.description)) or any(match(s) for s in package.provides)
+    return (
+        any(match(s) for s in (package.name, package.description)) or 
+        any(match(s) for s in package.keywords) or 
+        any(match(s) for s in package.provides))
+
+
+def fuzzy_match_model(model: schema.Model, pattern: str):
+    pattern = pattern.lower()
+
+    def match(s: str | None):
+        return pattern in s.lower() if s else False
+
+    return (
+        any(match(s) for s in (model.name, model.description)) or 
+        any(match(s) for s in model.keywords))
 
 
 @st.dialog(title='Attribute Description')
@@ -117,6 +132,9 @@ def page_start():
                     for i, attr in enumerate(package.provides):
                         if st.button(attr, type='tertiary', key=f'click:{package.uid}:{i}-{attr}'):
                             show_attribute_description(attr)
+                with st.container(horizontal=True):
+                    for keyword in package.keywords:
+                        st.badge(keyword)
                 st.write(package.description)
                 with st.container(horizontal=True):
                     if st.button('Select', key=f'select:{package.uid}'):
@@ -136,6 +154,71 @@ def page_start():
                 render_package_models(pipeline, package)
 
         problem = pipeline.problem()
+        has_attribute_problem = bool(problem and (problem.missing_module_packages or problem.attributes))
+
+        if has_attribute_problem:
+            # list errors
+            with st.container():
+                for p in problem.missing_module_packages:
+                    st.error(f'Missing module for "{p.name}"', icon=ICON_ERROR)
+                # for p in problem.missing_model_packages:
+                #     st.error(f'Missing model for "{p.name}" where usage = {p.usage_models}', icon=ICON_ERROR)
+                for p in problem.attributes:
+                    st.error(f'Missing required attribute "{p}"', icon=ICON_ERROR)
+
+        busy = st.empty()
+
+        with st.container(horizontal=True):
+            no_solve = bool(event) or problem is None
+            if st.button('Solve', disabled=no_solve):
+                session_state.event = 'solve'
+                st.rerun()
+
+            no_next = bool(event) or has_attribute_problem or not pipeline_packages
+            if st.button('Next', disabled=no_next):
+                session_state.package_uid = None
+                session_state.page = 'model'
+                session_state.error = None
+                st.rerun()
+
+    if event == 'solve':
+        with busy.spinner('Solving...', show_time=True):
+            pipeline.solve(ignore_models=True)
+            session_state.event = ''
+            st.rerun()
+
+
+def page_model():
+    st.title('Model')
+
+    column_pipeline, column_models = st.columns([1, 1])
+
+    factory = session_state.factory
+    pipeline = session_state.pipeline
+    event = session_state.event
+    edit_package_uid = session_state.package_uid
+
+    edit_package: schema.Package | None = None
+
+    problem = pipeline.problem()
+    missing_model_package_ids = {} if not problem else set([p.uid for p in problem.missing_model_packages])
+
+    with column_pipeline:
+        st.subheader('Pipeline')
+
+        for package in pipeline.packages:
+            if edit_package_uid and package.uid == edit_package_uid:
+                edit_package = package
+
+            has_missing_model = package.uid in missing_model_package_ids
+
+            with st.container(border=True):
+                render_package_header(package)
+                render_package_models(pipeline, package, deletable=True)
+                if st.button('Edit', key=f'edit-model:{package.uid}',
+                             type='primary' if has_missing_model else 'secondary'):
+                    session_state.package_uid = package.uid
+                    st.rerun()
 
         if problem:
             # list errors
@@ -155,11 +238,54 @@ def page_start():
                 session_state.event = 'solve'
                 st.rerun()
 
-            no_next = bool(event) or problem is not None or not pipeline_packages
+            if st.button('Prev'):
+                session_state.page = 'start'
+                session_state.error = None
+                st.rerun()
+
+            no_next = bool(event) or problem is not None
             if st.button('Next', disabled=no_next):
+                session_state.package_uid = None
                 session_state.page = 'setting'
                 session_state.error = None
                 st.rerun()
+
+    with column_models:
+        st.subheader('Models')
+
+        if edit_package is None:
+            st.info('Click "Edit" to edit package models.')
+        else:
+            st.markdown(f'**{edit_package.name}**')
+
+        search_model = st.text_input(
+            'Search', value=session_state.search_model, key="search_model",
+            label_visibility='collapsed')
+        if search_model != session_state.search_model:
+            session_state.search_model = search_model
+            st.rerun()
+
+        models = edit_package.models if edit_package else []
+        models = [m for m in models if fuzzy_match_model(m, search_model)]
+
+        for model in models:
+            with st.container(border=True):
+                with st.container(horizontal=True):
+                    if model.recommended:
+                        st.markdown(
+                            '<span style="color: red">*</span>'
+                            f"**{model.name}** `v{model.version}`",
+                            unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"**{model.name}** `v{model.version}`")
+                with st.container(horizontal=True):
+                    for keyword in model.keywords:
+                        st.badge(keyword)
+                st.write(model.description)
+                with st.container(horizontal=True):
+                    if st.button('Add', key=f'add-model:{model.uid}'):
+                        pipeline.add_model(edit_package.uid, model.uid)
+                        st.rerun()
 
     if event == 'solve':
         with busy.spinner('Solving...', show_time=True):
@@ -338,13 +464,19 @@ def render_package_header(package: schema.Package):
         for attr in package.provides:
             st.badge(attr)
 
-def render_package_models(pipeline: Pipeline, package: schema.Package):
+
+def render_package_models(pipeline: Pipeline, package: schema.Package, deletable: bool = False):
     models = pipeline.get_models(package.uid)
     for model in models:
-        if model.usage:
-            st.markdown(f"- **{model.usage}** {model.name} `v{model.version}`")
-        else:
-            st.markdown(f"- {model.name} `v{model.version}`")
+        with st.container(horizontal=True):
+            if model.usage:
+                st.markdown(f"- **{model.usage}** {model.name} `v{model.version}`")
+            else:
+                st.markdown(f"- {model.name} `v{model.version}`")
+            if deletable:
+                if st.button('Delete', key=f'delete-model:{package.uid}:{model.uid}', type='primary'):
+                    pipeline.remove_model(package.uid, model.uid)
+                    st.rerun()
 
 
 def page_setting():
@@ -374,7 +506,7 @@ def page_setting():
 
         with st.container(horizontal=True):
             if st.button('Prev'):
-                session_state.page = 'start'
+                session_state.page = 'model'
                 session_state.error = None
                 st.rerun()
 
@@ -1174,6 +1306,7 @@ def main():
 
     pages = {
         'start': page_start,
+        'model': page_model,
         'setting': page_setting,
         'install': page_install,
         'run': page_run,
