@@ -22,7 +22,7 @@ from fabopsy_lib.attributes import schema as attribute_schema
 from fabopsy_lib.utils.markdown import schema2markdown
 
 ICON_ERROR = "\N{CROSS MARK}"
-ICON_PAGE = "\N{CRYSTAL BALL}"
+ICON_PAGE = "\N{FIRE}"
 
 
 @dataclass
@@ -54,7 +54,6 @@ class SessionState(object):
 
     parameter_search: str = ''
     parameter_show_description: bool = True
-    parameter_expand_all: bool = False
 
     batch_grouped: list[dict[str, Any]] = field(default_factory=lambda: [])
     batch_rows: list[dict[str, Any]] = field(default_factory=lambda: [])
@@ -171,7 +170,7 @@ def page_start():
 
 def parameter_integer(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
-    value = st.number_input(key=key, label=param.name, value=param.value, step=1)
+    value = st.number_input(key=key, label=parameter_display_name(param), value=param.value, step=1)
     if value != param.value:
         update = {param.name: int(value)}
         pipeline.set_parameters(package_uid, update)
@@ -179,7 +178,7 @@ def parameter_integer(pipeline: Pipeline, package_uid: str, param: schema.Parame
 
 def parameter_number(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
-    value = st.number_input(key=key, label=param.name, value=param.value, format='%f', step=1e-9)
+    value = st.number_input(key=key, label=parameter_display_name(param), value=param.value, format='%f', step=1e-9)
     if value != param.value:
         update = {param.name: float(value)}
         pipeline.set_parameters(package_uid, update)
@@ -187,7 +186,7 @@ def parameter_number(pipeline: Pipeline, package_uid: str, param: schema.Paramet
 
 def parameter_string(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
-    value = st.text_input(key=key, label=param.name, value=param.value)
+    value = st.text_input(key=key, label=parameter_display_name(param), value=param.value)
     if value != param.value:
         update = {param.name: str(value)}
         pipeline.set_parameters(package_uid, update)
@@ -199,9 +198,21 @@ def parameter_selection(pipeline: Pipeline, package_uid: str, param: schema.Para
         index = param.selection.index(param.value)
     except Exception:
         index = 0 if param.selection else 0
-    value = st.selectbox(key=key, label=param.name, options=param.selection, index=index if param.selection else 0)
+    value = st.selectbox(
+        key=key,
+        label=parameter_display_name(param),
+        options=param.selection,
+        index=index if param.selection else 0,
+    )
     if value is not None and value != param.value:
         update = {param.name: str(value)}
+        pipeline.set_parameters(package_uid, update)
+
+def parameter_boolean(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
+    key = package_uid + ':' + param.name
+    value = st.toggle(key=key, label=parameter_display_name(param), value=param.value)
+    if value != param.value:
+        update = {param.name: bool(value)}
         pipeline.set_parameters(package_uid, update)
 
 
@@ -222,45 +233,45 @@ def parse_array(t: type[T], value: str) -> list[T] | None:
 def parameter_integer_array(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
     format_value = format_array(int, param.value)
-    value = st.text_input(key=key, label=param.name, value=format_value)
+    value = st.text_input(key=key, label=parameter_display_name(param), value=format_value)
     if value is not None and value != format_value:
         parse_value = parse_array(int, value)
         if parse_value is not None:
             update = {param.name: parse_value}
             pipeline.set_parameters(package_uid, update)
         else:
-            st.error(f'Invalid {param.name}: {value}')
+            st.error(f'Invalid {parameter_display_name(param)}: {value}')
 
 
 def parameter_number_array(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
     format_value = format_array(float, param.value)
-    value = st.text_input(key=key, label=param.name, value=format_value)
+    value = st.text_input(key=key, label=parameter_display_name(param), value=format_value)
     if value is not None and value != format_value:
         parse_value = parse_array(float, value)
         if parse_value is not None:
             update = {param.name: parse_value}
             pipeline.set_parameters(package_uid, update)
         else:
-            st.error(f'Invalid {param.name}: {value}')
+            st.error(f'Invalid {parameter_display_name(param)}: {value}')
 
 
 def parameter_string_array(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
     format_value = format_array(str, param.value)
-    value = st.text_input(key=key, label=param.name, value=format_value)
+    value = st.text_input(key=key, label=parameter_display_name(param), value=format_value)
     if value is not None and value != format_value:
         parse_value = parse_array(str, value)
         if parse_value is not None:
             update = {param.name: parse_value}
             pipeline.set_parameters(package_uid, update)
         else:
-            st.error(f'Invalid {param.name}: {value}')
+            st.error(f'Invalid {parameter_display_name(param)}: {value}')
 
 
 def parameter_selection_array(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
-    value = st.multiselect(key=key, label=param.name, options=param.selection, default=param.value)
+    value = st.multiselect(key=key, label=parameter_display_name(param), options=param.selection, default=param.value)
     if value is not None and value != param.value:
         update = {param.name: value}
         pipeline.set_parameters(package_uid, update)
@@ -284,14 +295,18 @@ def parse_object(value: str) -> dict[str, Any] | None:
 def parameter_object(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ':' + param.name
     format_value = format_object(param.value)
-    value = st.text_area(key=key, label=param.name, value=format_value)
+    value = st.text_area(key=key, label=parameter_display_name(param), value=format_value)
     if value is not None and value != format_value:
         parse_value = parse_object(value)
         if parse_value is not None:
             update = {param.name: parse_value}
             pipeline.set_parameters(package_uid, update)
         else:
-            st.error(f'Invalid {param.name}: {value}')
+            st.error(f'Invalid {parameter_display_name(param)}: {value}')
+
+def parameter_display_name(param: schema.Parameter) -> str:
+    text = getattr(param, 'text', '') or ''
+    return text if text else param.name
 
 
 def component_parameter(package_uid: str, param: schema.Parameter, *, show_description: bool = True):
@@ -301,6 +316,7 @@ def component_parameter(package_uid: str, param: schema.Parameter, *, show_descr
         schema.ParameterType.Number: parameter_number,
         schema.ParameterType.String: parameter_string,
         schema.ParameterType.Selection: parameter_selection,
+        schema.ParameterType.Boolean: parameter_boolean,
         schema.ParameterType.IntegerArray: parameter_integer_array,
         schema.ParameterType.NumberArray: parameter_number_array,
         schema.ParameterType.StringArray: parameter_string_array,
@@ -314,15 +330,7 @@ def component_parameter(package_uid: str, param: schema.Parameter, *, show_descr
         if generator is not None:
             generator(pipeline, package_uid, param)
         else:
-            st.markdown(f'**{param.name}**: {param.value}')
-
-def infer_parameter_group(name: str) -> str:
-    for sep in ('.', ':', '/'):
-        if sep in name:
-            return name.split(sep, 1)[0] or 'General'
-    if '_' in name:
-        return name.split('_', 1)[0] or 'General'
-    return 'General'
+            st.markdown(f'**{parameter_display_name(param)}**: {param.value}')
 
 def render_package_header(package: schema.Package):
     with st.container(horizontal=True):
@@ -405,11 +413,6 @@ def page_setting():
                     value=session_state.parameter_show_description,
                     key='parameter_show_description',
                 )
-                expand_all = st.checkbox(
-                    'Expand all groups',
-                    value=session_state.parameter_expand_all,
-                    key='parameter_expand_all',
-                )
 
                 if search_value:
                     s = search_value.strip().lower()
@@ -418,28 +421,12 @@ def page_setting():
                         if (p.name and s in p.name.lower()) or (p.description and s in p.description.lower())
                     ]
 
-                groups: dict[str, list[schema.Parameter]] = {}
-                for p in parameters:
-                    group = infer_parameter_group(p.name)
-                    groups.setdefault(group, []).append(p)
-
-                if not groups:
+                if not parameters:
                     st.info('No parameters matched.')
                 else:
-                    def group_sort_key(g: str) -> tuple[int, str]:
-                        return (0 if g == 'General' else 1, g.lower())
-
-                    for group in sorted(groups.keys(), key=group_sort_key):
-                        group_parameters = sorted(
-                            groups[group],
-                            key=lambda p: (p.name or '').lower(),
-                        )
-                        with st.expander(
-                            f'{group} ({len(group_parameters)})',
-                            expanded=expand_all or len(groups) == 1,
-                        ):
-                            for p in group_parameters:
-                                component_parameter(edit_package.uid, p, show_description=show_description)
+                    parameters = sorted(parameters, key=lambda p: (parameter_display_name(p) or '').lower())
+                    for p in parameters:
+                        component_parameter(edit_package.uid, p, show_description=show_description)
 
 
 def page_install():

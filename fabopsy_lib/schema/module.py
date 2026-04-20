@@ -164,6 +164,8 @@ class ParameterType(str, Enum):
 class Parameter(CustomBaseModel):
     name: str
     type: ParameterType
+
+    text: str = Field('')
     description: str = Field('')
 
     value: None | int | float | str | bool | list[int] | list[float] | list[str] | dict[str, Any] = Field(None)
