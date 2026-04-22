@@ -157,6 +157,12 @@ class CloudModel(api.UsageModel):
         if self.__cfg.index:
             if not os.path.exists(os.path.join(model_dir, self.__cfg.index)):
                 return None
+        for rel_path in self.__cfg.contains or []:
+            rel_path = rel_path.strip()
+            if not rel_path:
+                continue
+            if not os.path.exists(os.path.join(model_dir, rel_path)):
+                return None
         return model_dir
 
     def exists(self) -> bool:
@@ -190,6 +196,13 @@ class CloudModel(api.UsageModel):
 
         if self.__cfg.index and not os.path.exists(os.path.join(model_dir, self.__cfg.index)):
             raise RuntimeError(f'Index was not found in cloud model directory: {self.__cfg.index}')
+        for rel_path in self.__cfg.contains or []:
+            rel_path = rel_path.strip()
+            if not rel_path:
+                continue
+            full_path = os.path.join(model_dir, rel_path)
+            if not os.path.exists(full_path):
+                raise RuntimeError(f'Contains path was not found in cloud model directory: {rel_path}')
 
         rel_path = os.path.relpath(model_dir, self.__cache_dir)
         marker = {
@@ -286,7 +299,18 @@ class DownloadModel(api.UsageModel):
 
     def exists(self) -> bool:
         cache_index = os.path.join(self.__cache_dir, self.__cfg.index)
-        return os.path.exists(cache_index)
+        if not os.path.exists(cache_index):
+            return False
+        if not self.__cfg.unpack:
+            return True
+        for rel_path in self.__cfg.contains or []:
+            rel_path = rel_path.strip()
+            if not rel_path:
+                continue
+            full_path = os.path.join(self.__cache_dir, rel_path)
+            if not os.path.exists(full_path):
+                return False
+        return True
 
     def cache(self) -> str:
         cache_index = os.path.join(self.__cache_dir, self.__cfg.index)
@@ -305,10 +329,18 @@ class DownloadModel(api.UsageModel):
                 extract_file(compressed_file, self.__cache_dir)
         else:
             # download to index file
-            download_file(self.__cfg.url, cache_index, md5=self.__cfg.md5)
+            download_file(self.__cfg.url, cache_index, md5=self.__cfg.md5, sha256=self.__cfg.sha256)
 
         assert os.path.exists(cache_index), (
             RuntimeError(f'Index was not found in download directory: {self.__cfg.index}'))
+        if self.__cfg.unpack:
+            for rel_path in self.__cfg.contains or []:
+                rel_path = rel_path.strip()
+                if not rel_path:
+                    continue
+                full_path = os.path.join(self.__cache_dir, rel_path)
+                if not os.path.exists(full_path):
+                    raise RuntimeError(f'Contains path was not found in download directory: {rel_path}')
 
         return cache_index
 

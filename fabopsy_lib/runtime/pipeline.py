@@ -286,6 +286,19 @@ class Pipeline(object):
                     if self._add_module(factory_module.module):
                         logger.debug(f'Add module {factory_module.module.uid}')
 
+    def get_package(self, uid: schema.Uid = None, name: str = None, provide: str = None) -> schema.Package | None:
+        """
+        Query the first matching package in the current configuration by uid, name, or provide.
+        Priority: uid > name > provide.
+        """
+        if uid is not None:
+            return self._query_package(uid)
+        if name is not None:
+            return next((p for p in self.__config.packages if p.name == name), None)
+        if provide is not None:
+            return next((p for p in self.__config.packages if provide in p.provides), None)
+        return None
+
     def add_attributes(self, attr: str | Iterable[str], /, *attrs: str):
         names = [attr] if isinstance(attr, str) else list(attr)
         names = [*names, *attrs]

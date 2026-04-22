@@ -91,6 +91,9 @@ class CloudModel(CustomBaseModel):
     index: str = Field(
         '',
         description='Optional index file/dir path for existence check, relative to the downloaded directory')
+    contains: list[str] = Field(
+        [],
+        description='Extra file/dir path for existence check, relative to the downloaded directory')
 
 
 class DownloadModel(CustomBaseModel):
@@ -107,6 +110,9 @@ class DownloadModel(CustomBaseModel):
     unpack: bool = Field(
         False,
         description='Whether the downloaded file is compressed. If true, it will be decompressed automatically.')
+    contains: list[str] = Field(
+        [],
+        description='Extra file/dir path for existence check. Only work with upack = True')
 
 
 class Model(Entity):
