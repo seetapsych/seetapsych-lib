@@ -18,8 +18,17 @@ from fabopsy_lib.runtime.pipeline import UnsatisfactionConfig
 from fabopsy_lib.runtime.export import list2csv
 from fabopsy_lib import schema
 from fabopsy_lib.utils.logger import set_level as set_logger_level
-from fabopsy_lib.attributes import schema as attribute_schema
 from fabopsy_lib.utils.markdown import schema2markdown
+
+try:
+    from fabopsy_attributes.schema import schema as attribute_schema
+    has_schema_attributes = True
+except ImportError:
+    # sys.stderr.write("[WARNING] Failed to import fabopsy_attributes. Install that to enable attribute schema viewer.\n")
+    from pydantic import BaseModel
+    attribute_schema: dict[str, BaseModel] = {}
+    has_schema_attributes = False
+
 
 ICON_ERROR = "\N{CROSS MARK}"
 ICON_PAGE = "\N{FIRE}"
@@ -97,6 +106,10 @@ def fuzzy_match_model(model: schema.Model, pattern: str):
 
 @st.dialog(title='Attribute Description')
 def show_attribute_description(attr: str):
+    if not has_schema_attributes:
+        st.warning('Failed to import fabopsy_attributes to show schema.')
+        return
+
     model = attribute_schema.get(attr, None)
     if model is None:
         st.warning('No schema found!')
@@ -123,7 +136,7 @@ def page_start():
             session_state.search_package = search_package
             st.rerun()
 
-        packages = [p for p in factory.packages if fuzzy_match_package(p, search_package)]
+        packages = [p for p in factory.packages if fuzzy_match_package(p, search_package or '')]
 
         for package in packages:
             with st.container(border=True):
@@ -266,7 +279,7 @@ def page_model():
             st.rerun()
 
         models = edit_package.models if edit_package else []
-        models = [m for m in models if fuzzy_match_model(m, search_model)]
+        models = [m for m in models if fuzzy_match_model(m, search_model or '')]
 
         for model in models:
             with st.container(border=True):
