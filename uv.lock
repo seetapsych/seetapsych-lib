@@ -405,10 +405,7 @@ name = "fabopsy-lib"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
-    { name = "aistudio-sdk" },
-    { name = "huggingface-hub" },
     { name = "jsonschema2md" },
-    { name = "modelscope" },
     { name = "nvidia-ml-py" },
     { name = "packaging" },
     { name = "platformdirs" },
@@ -420,7 +417,10 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "aistudio-sdk" },
     { name = "build" },
+    { name = "huggingface-hub" },
+    { name = "modelscope" },
     { name = "onnxruntime-gpu", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "onnxruntime-gpu", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "opencv-python" },
@@ -430,10 +430,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aistudio-sdk", specifier = ">=0.3.8" },
-    { name = "huggingface-hub", specifier = ">=1.6.0" },
     { name = "jsonschema2md", specifier = ">=1.7.0" },
-    { name = "modelscope", specifier = ">=1.34.0" },
     { name = "nvidia-ml-py", specifier = ">=13.595.45" },
     { name = "packaging", specifier = ">=25.0" },
     { name = "platformdirs", specifier = ">=4.5.1" },
@@ -445,7 +442,10 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "aistudio-sdk", specifier = ">=0.3.8" },
     { name = "build", specifier = ">=1.4.4" },
+    { name = "huggingface-hub", specifier = ">=1.6.0" },
+    { name = "modelscope", specifier = ">=1.34.0" },
     { name = "onnxruntime-gpu", marker = "python_full_version < '3.11'", specifier = "<1.24" },
     { name = "onnxruntime-gpu", marker = "python_full_version >= '3.11'", specifier = ">=1.24" },
     { name = "opencv-python", specifier = ">=4.13.0.90" },

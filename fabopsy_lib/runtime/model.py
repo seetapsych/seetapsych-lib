@@ -12,6 +12,7 @@ from fabopsy_lib.runtime.actions import call_entry
 from fabopsy_lib.utils.dirs import appdirs
 from fabopsy_lib.utils.download_file import download_file, extract_file
 from fabopsy_lib.utils.defer import defer
+from fabopsy_lib.runtime.actions import install_requirements
 
 __all__ = [
     'build_model',
@@ -220,6 +221,11 @@ class CloudModel(api.UsageModel):
 
 def _download_huggingface(cfg: schema.CloudModel, cache_dir: str) -> str:
     try:
+        import huggingface_hub
+    except ImportError:
+        install_requirements(['huggingface_hub'])
+
+    try:
         from huggingface_hub import snapshot_download
     except ImportError as e:
         raise RuntimeError('huggingface_hub is required for CloudModel host=huggingface') from e
@@ -242,6 +248,11 @@ def _download_huggingface(cfg: schema.CloudModel, cache_dir: str) -> str:
 
 
 def _download_modelscope(cfg: schema.CloudModel, cache_dir: str) -> str:
+    try:
+        import modelscope
+    except ImportError:
+        install_requirements(['modelscope'])
+
     snapshot_download = None
     try:
         from modelscope.hub.snapshot_download import snapshot_download as _snapshot_download
@@ -258,6 +269,11 @@ def _download_modelscope(cfg: schema.CloudModel, cache_dir: str) -> str:
 
 
 def _download_aistudio(cfg: schema.CloudModel, cache_dir: str) -> str:
+    try:
+        import aistudio_sdk
+    except ImportError:
+        install_requirements(['aistudio-sdk'])
+
     try:
         from aistudio_sdk.snapshot_download import snapshot_download
     except ImportError as e:

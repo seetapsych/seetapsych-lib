@@ -9,7 +9,7 @@ from fabopsy_lib import schema
 from fabopsy_lib.runtime.factory import Factory
 from fabopsy_lib.runtime.model import build_model, exists_model
 from fabopsy_lib.utils.pencilbox import unique_list
-from fabopsy_lib.runtime.actions import unsatisfied_requirements, install_requirements, import_entry
+from fabopsy_lib.runtime.actions import unsatisfied_requirements, install_module_requirements, import_entry
 from fabopsy_lib.utils.logger import logger
 
 __all__ = [
@@ -807,7 +807,7 @@ class Pipeline(object):
         for module in self.__config.modules:
             log_requirements = ' '.join(module.requirements)
             logger.info(f'Install requirements of module [{module.name}]({module.uid}): {log_requirements}')
-            install_requirements(module)
+            install_module_requirements(module)
 
     def cache_models(self, *, cache_dir: str = None):
         """

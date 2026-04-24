@@ -21,6 +21,7 @@ from fabopsy_lib.utils.logger import logger
 __all__ = [
     'unsatisfied_requirements',
     'install_requirements',
+    'install_module_requirements',
     'import_entry',
     'call_entry',
     'load_package',
@@ -176,12 +177,11 @@ def package_manager() -> list[str]:
     return [sys.executable, '-m', 'pip']
 
 
-def install_requirements(module: schema.ModuleSpec, *, index_url: str = None, trusted_host: str | bool = None):
-    unsatisfied = unsatisfied_requirements(module)
-    if not unsatisfied:
+def install_requirements(requirements: list[str], *, index_url: str = None, trusted_host: str | bool = None):
+    if not requirements:
         return
 
-    cmd = [*package_manager(), 'install'] + unsatisfied
+    cmd = [*package_manager(), 'install'] + requirements
     if index_url:
         cmd += ['--index-url', index_url]
     if trusted_host:
@@ -209,7 +209,7 @@ def install_requirements(module: schema.ModuleSpec, *, index_url: str = None, tr
             sys.stderr.write(stderr + "\n\n")
             sys.stderr.flush()
 
-            msg = f'Failed to install requirements {unsatisfied}:\n{stderr}'
+            msg = f'Failed to install requirements {requirements}:\n{stderr}'
             logger.error(msg)
             raise RuntimeError(msg)
     except FileNotFoundError:
@@ -217,9 +217,14 @@ def install_requirements(module: schema.ModuleSpec, *, index_url: str = None, tr
         logger.error(msg)
         raise RuntimeError(msg)
     except Exception as e:
-        msg = f'Failed to execute pip install {unsatisfied}: {e}'
+        msg = f'Failed to execute uv pip or pip install {requirements}: {e}'
         logger.error(msg)
         raise RuntimeError(msg) from e
+
+
+def install_module_requirements(module: schema.ModuleSpec, *, index_url: str = None, trusted_host: str | bool = None):
+    unsatisfied = unsatisfied_requirements(module)
+    install_requirements(unsatisfied)
 
 
 def import_entry(entry: schema.Entry | None) -> Callable | None:
@@ -309,7 +314,7 @@ def test():
     module = schema.Module(module={'requirements': requirements}, packages=[])
 
     print(unsatisfied_requirements(module))
-    install_requirements(module)
+    install_module_requirements(module)
 
 
 if __name__ == '__main__':
