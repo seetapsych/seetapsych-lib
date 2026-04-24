@@ -8,6 +8,8 @@ from fabopsy_lib import api
 from fabopsy_lib.runtime.actions import load_package
 from fabopsy_lib.runtime.model import build_model
 from fabopsy_lib.runtime.pipeline import Pipeline
+from fabopsy_lib.utils.cuda import list_nvidia_devices
+from fabopsy_lib.utils.logger import logger
 
 
 __all__ = [
@@ -29,6 +31,16 @@ class MissingInputModal(Exception):
 
 class Runner(object):
     def __init__(self, pipeline: Pipeline, device: api.Device = None, *, cache_dir: str = None):
+        if device is None or not device.type:
+            nvidia_devices = list_nvidia_devices()
+            if nvidia_devices:
+                device_info = '\n'.join([f'    - {d}' for d in nvidia_devices])
+                logger.info(f'Detected {len(nvidia_devices)} NVIDIA GPU(s).\n{device_info}')
+                device = api.Device('cuda')
+            else:
+                logger.info('No NVIDIA GPU or compatible driver detected.')
+                device = api.Device('cpu')
+
         self.__start_frame_tick = 1
 
         self.__device = device
