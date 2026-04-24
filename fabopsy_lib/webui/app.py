@@ -26,7 +26,7 @@ try:
 except ImportError:
     # sys.stderr.write("[WARNING] Failed to import fabopsy_attributes. Install that to enable attribute schema viewer.\n")
     from pydantic import BaseModel
-    attribute_schema: dict[str, BaseModel] = {}
+    attribute_schema: dict[str, type[BaseModel]] = {}
     has_schema_attributes = False
 
 

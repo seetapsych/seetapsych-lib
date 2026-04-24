@@ -2,7 +2,8 @@
 
 > Face and body based psychology analysis
 
-FaboPsy Lib is a Python library for face- and body-based psychology analysis. It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
+FaboPsy Lib is a Python library for face- and body-based psychology analysis.
+It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
 
 ## Requirements
 
