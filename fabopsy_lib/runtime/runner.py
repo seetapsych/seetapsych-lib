@@ -31,7 +31,7 @@ class MissingInputModal(Exception):
 
 class Runner(object):
     def __init__(self, pipeline: Pipeline, device: api.Device = None, *, cache_dir: str = None):
-        if device is None or not device.type:
+        if device is None or not device.type or device.type.lower() == 'auto':
             nvidia_devices = list_nvidia_devices()
             if nvidia_devices:
                 device_info = '\n'.join([f'    - {d}' for d in nvidia_devices])
