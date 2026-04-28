@@ -100,7 +100,7 @@ class DownloadModel(CustomBaseModel):
     index: str = Field(
         description='Output filename used as the model cache index, for existence checks.')
     url: str = Field(
-        description='Model download URL. HTTP is recommended')
+        description='Model download FTP or HTTP/S URL. HTTP/S is recommended')
     md5: str = Field(
         '',
         description='MD5 checksum of the downloaded model file')
