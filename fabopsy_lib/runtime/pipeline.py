@@ -89,6 +89,9 @@ class UnsatisfactionConfig(BaseModel):
         [], description='package/model entry is not callable')
     models: list[schema.Model] = Field(
         [], description='model did not exists in cache')
+    imports: list[list[str]] = Field(
+        [], description='missing python package while checking config'
+    )
 
     def __bool__(self):
         return bool(self.modules or self.entries or self.models)
@@ -765,6 +768,7 @@ class Pipeline(object):
             2. Whether the entries of packages and models can be imported and the calling functions can be obtained.
         :return:
         """
+        un_imports: list[list[str]] = []
         un_modules: list[schema.ModuleSpec] = []
         for module in self.__config.modules:
             un_requirements = unsatisfied_requirements(module)
@@ -776,11 +780,17 @@ class Pipeline(object):
 
         un_entries: list[schema.Entry] = []
         for package in self.__config.packages:
-            package_entry = import_entry(package.entry)
+            package_entry, pname = import_entry(package.entry)
             if package_entry is None:
                 entry_method = package.entry.method
                 if package.entry.package:
                     entry_method = '.'.join([package.entry.package, entry_method])
+
+                if pname:
+                    logger.debug(f'Can not import package entry "{entry_method}"'
+                                 f', because it has failed to import "{pname}"')
+                    un_imports.append([entry_method, pname])
+
                 logger.debug(f'Unsatisfied package entry method {entry_method}')
                 un_entries.append(package.entry)
 
@@ -789,11 +799,17 @@ class Pipeline(object):
             for model in models:
                 # check model entry
                 if model.entry is not None:
-                    model_entry = import_entry(model.entry)
+                    model_entry, pname = import_entry(model.entry)
                     if model_entry is None:
                         entry_method = model.entry.method
                         if model.entry.package:
                             entry_method = '.'.join([model.entry.package, entry_method])
+
+                        if pname:
+                            logger.debug(f'Can not import model entry "{entry_method}"'
+                                         f', because it has failed to import "{pname}"')
+                            un_imports.append([entry_method, pname])
+
                         logger.debug(f'Unsatisfied model entry method {entry_method}')
                         un_entries.append(model.entry)
                         continue
@@ -802,7 +818,7 @@ class Pipeline(object):
                     logger.debug(f'Unsatisfied uncached model [{model.name}]({model.uid})')
                     un_models.append(model)
 
-        unsatisfied = un_modules or un_entries or un_models
+        unsatisfied = un_modules or un_entries or un_models or un_imports
 
         if not unsatisfied:
             return True, None
@@ -811,6 +827,7 @@ class Pipeline(object):
             modules=un_modules,
             entries=un_entries,
             models=un_models,
+            imports=un_imports
         )
 
     def install_requirements(self, *, backend: InstallBackend = 'pip'):

@@ -227,31 +227,35 @@ def install_module_requirements(module: schema.ModuleSpec, *, index_url: str = N
     install_requirements(unsatisfied)
 
 
-def import_entry(entry: schema.Entry | None) -> Callable | None:
+def import_entry(entry: schema.Entry | None) -> tuple[Callable | None,  str | None]:
+    """
+    :param entry:
+    :return: entry function and failed import package name if that's the reason
+    """
     if entry is None:
-        return entry
+        return entry, None
 
     method = entry.method
     if entry.package:
         method = '.'.join([entry.package, method])
     if '.' not in method:
-        return None
+        return None, None
     lib_name, func_name = method.rsplit('.', 1)
 
     try:
         lib = importlib.import_module(lib_name)
     except ImportError as e:
-        return None
+        return None, e.name
 
     try:
         func = getattr(lib, func_name)
     except AttributeError as e:
-        return None
+        return None, None
 
     if not callable(func):
-        return None
+        return None, None
 
-    return func
+    return func, None
 
 
 def call_entry(entry: schema.Entry, optional_kwargs: dict[str, Any] = None) -> Any:
