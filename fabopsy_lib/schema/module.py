@@ -112,7 +112,7 @@ class DownloadModel(CustomBaseModel):
         description='Whether the downloaded file is compressed. If true, it will be decompressed automatically.')
     contains: list[str] = Field(
         [],
-        description='Extra file/dir path for existence check. Only work with upack = True')
+        description='Extra file/dir path for existence check. Only work with unpack = True')
 
 
 class Model(Entity):
