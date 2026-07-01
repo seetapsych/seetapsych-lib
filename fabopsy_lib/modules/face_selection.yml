@@ -15,6 +15,7 @@ packages:
     inputs: []
     provides:
       - face/selection
+      - face/detection
     requires:
       - face/detection
     entry:

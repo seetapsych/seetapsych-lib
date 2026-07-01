@@ -198,13 +198,20 @@ class Pipeline(object):
             return False
 
         provides = set(package.provides)
+        inplace = provides.intersection(set(package.requires))
 
-        # TODO: The package sorting requires considering their own requires and provides
         packages = self.__config.packages
         insert_index = 0
         while insert_index < len(packages):
+            # provide attributes must before other requires
             if any((attr in provides for attr in packages[insert_index].requires)):
                 break
+            # The package sorting requires considering their own requires and provides
+            #   Solve package like in face/detection out face/detection
+            if any((attr in inplace for attr in packages[insert_index].provides)):
+                insert_index += 1
+                break
+
             insert_index += 1
 
         self.__config.packages.insert(insert_index, package.model_copy(deep=True))
@@ -553,7 +560,7 @@ class Pipeline(object):
         # check attributes
         problem_attributes: list[str] = []
         packages = self.__config.packages
-        provide_attributes = set([attr for p in packages for attr in p.provides])
+        provide_attributes = set([attr for p in packages for attr in set(p.provides) - set(p.requires)])
         require_attributes = unique_list([attr for p in packages for attr in p.requires])
 
         check_attributes = unique_list(self.__config.attributes + require_attributes)
@@ -668,6 +675,14 @@ class Pipeline(object):
 
             if package_added:
                 problem = self.problem()
+                if problem is None:
+                    break
+
+        # check problem has solved
+        if problem is None:
+            solved.unsolved = unsolved if unsolved else None
+            return solved if solved else None
+
 
         # solve modules
         for package in problem.missing_module_packages:

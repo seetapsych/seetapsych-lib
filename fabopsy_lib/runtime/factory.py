@@ -38,7 +38,7 @@ class Factory(object):
             for model in package.models:
                 self.__model_uid_map[model.uid] = model
                 self.__model_uid_map_package[model.uid] = package
-            for attr in package.provides:
+            for attr in set(package.provides) - set(package.requires):
                 providers = self.__attribute_providers.get(attr, None)
                 if providers is not None:
                     providers.append(package)
