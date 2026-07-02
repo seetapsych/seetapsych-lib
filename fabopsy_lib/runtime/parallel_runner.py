@@ -184,16 +184,69 @@ class PackageExecutor(Executor):
 
 
 class ParallelRunner(object):
-    def __init__(self, pipeline: Pipeline, device: api.Device = None, *, cache_dir: str = None):
-        if device is None or not device.type or device.type.lower() == 'auto':
+    def __init__(
+            self,
+            pipeline: Pipeline,
+            device: api.Device | str | dict[str, api.Device | str] = None,
+            *, cache_dir: str = None):
+        global_device: Optional[api.Device] = None
+        attribute_device_map: dict[str, api.Device] = {}
+        device_pool: list[api.Device] = []
+
+        if isinstance(device, str):
+            device = api.Device(device)
+
+        if device is None \
+                or isinstance(device, dict) \
+                or not device.type \
+                or device.type.lower() == 'auto':
+            # auto select device
+            if isinstance(device, dict):
+                for attr, dev in device.items():
+                    if isinstance(dev, str):
+                        dev = api.Device(dev)
+                    attribute_device_map[attr] = dev
+            # list nvidia devices
             nvidia_devices = list_nvidia_devices()
             if nvidia_devices:
                 device_info = '\n'.join([f'    - {d}' for d in nvidia_devices])
                 logger.info(f'Detected {len(nvidia_devices)} NVIDIA GPU(s).\n{device_info}')
-                device = api.Device('cuda')
+                device_pool.extend([api.Device('cuda', i) for i in range(len(nvidia_devices))])
             else:
                 logger.info('No NVIDIA GPU or compatible driver detected.')
-                device = api.Device('cpu')
+                device_pool.extend([api.Device('cpu')])
+        else:
+            assert isinstance(device, api.Device)
+            global_device = device
+
+        if global_device is None:
+            global_device = attribute_device_map.get('', None) \
+                            or attribute_device_map.get('_', None)
+
+        select_index = 0
+        def select_device(p: schema.Package) -> api.Device:
+            # check attribute map
+            for a in p.provides:
+                d = attribute_device_map.get(a, None)
+                if d is not None:
+                    return d
+
+            # check global
+            if global_device is not None:
+                return global_device
+
+            # device pool is empty
+            if not device_pool:
+                return api.Device('cpu')
+
+            # random select from pool
+            nonlocal select_index
+            d = device_pool[select_index]
+
+            select_index += 1
+            select_index %= len(device_pool)
+
+            return d
 
         self.__start_frame_tick = 1
 
@@ -222,11 +275,13 @@ class ParallelRunner(object):
             models = pipeline.config.models.get(package.uid, [])
             parameters = pipeline.config.parameters.get(package.uid, [])
 
-            executor = PackageExecutor(package, models, parameters, device=device, cache_dir=cache_dir)
+            dev = select_device(package)
+            logger.info(f'Dispatching "{package.name}" to "{dev}"')
+            executor = PackageExecutor(package, models, parameters, device=dev, cache_dir=cache_dir)
 
             input_ids = [node_executor_ids[i] for i in node.inputs]
 
-            node_id = parallel_executor.register('', executor, input_ids)
+            node_id = parallel_executor.register(package.name, executor, input_ids)
 
             node_executor_ids[node] = node_id
 

@@ -344,6 +344,9 @@ class ParallelExecutor(object):
             except queue.Empty:
                 continue
 
+            if event is None:
+                break
+
             log_message = f"[ParallelExecutor][{event.level}][{event.source}] {event.message}"
             if event.detail:
                 log_message += f"\n{event.detail}"
@@ -496,6 +499,8 @@ class ParallelExecutor(object):
             q.put(stop_msg)
         self.__final_queue.put(stop_msg)
 
+        self.__health_queue.put(None)
+
     def terminate(self):
         for p in self.__processes.values():
             p.terminate()
@@ -517,8 +522,18 @@ class ParallelExecutor(object):
         if wait_seconds is None:
             wait_seconds = 1
 
+        def wait():
+            wait_until = time.time() + wait_seconds
+            for p in self.__processes.values():
+                now = time.time()
+                if now >= wait_until:
+                    break
+                p.join(wait_until - now)
+
         self.stop()
-        time.sleep(wait_seconds)
+
+        # first join wait process end
+        wait()
 
         dead = True
         for p in self.__processes.values():
@@ -529,12 +544,14 @@ class ParallelExecutor(object):
         if dead:
             return
 
-        time.sleep(wait_seconds)
+        # then join wait process receive signal and handle it
+        wait()
 
         for p in self.__processes.values():
             if p.is_alive():
                 p.kill()
 
+        # finally join wait process killed
         for p in self.__processes.values():
             p.join()
 
