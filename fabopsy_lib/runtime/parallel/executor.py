@@ -8,10 +8,11 @@ import multiprocessing as mp
 from enum import Enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Any, Literal
+from typing import Optional, Any, Literal, Callable
 from multiprocessing import synchronize as sc
 
 from fabopsy_lib.utils.logger import logger
+from fabopsy_lib.runtime.parallel.future import Future, WritableFuture
 
 
 __all__ = [
@@ -259,6 +260,11 @@ class ParallelExecutor(object):
 
         self.__sync_id = 1
 
+        # for async futures
+        self.__futures: dict[int, WritableFuture] = {}
+        self.__futures_lock = threading.Lock()
+        self.__dispatch_threads: list[threading.Thread] = []
+
     def register(self, name: str, executor: Executor, inputs: Optional[list[int]] = None) -> int:
         if not inputs:
             inputs = [0]
@@ -364,12 +370,56 @@ class ParallelExecutor(object):
                 self.stop()
                 break
 
+    def _thread_dispatch_output(self):
+        while not self.__stop_event.is_set():
+
+            try:
+                msg: Message = self.__final_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+
+            if msg.type == MessageType.STOP:
+                break
+
+            with self.__futures_lock:
+                future = self.__futures.pop(msg.sync_id, None)
+
+                # clear cancelled feature
+                items = list(self.__futures.items())
+                for k, v in items:
+                    if v.cancelled():
+                        self.__futures.pop(k)
+
+            if future is None:
+                logger.warning(f"received output for unknown or cancelled sync_id={msg.sync_id}")
+                continue
+
+            if msg.type == MessageType.PROBE:
+                future.set_result(msg.payload)
+            elif msg.type == MessageType.DATA:
+                future.set_result(msg.payload)
+            elif msg.type == MessageType.ERROR:
+                future.set_error(
+                    RuntimeError(f"received error from node {msg.source}: {msg.payload}")
+                )
+            else:
+                future.set_error(
+                    RuntimeError(f"received unexpected message: {msg}")
+                )
+
+        # finalize not finished futures
+        with self.__futures_lock:
+            for future in self.__futures.values():
+                future.set_error(RuntimeError('executor stopped'))
+            self.__futures.clear()
+
     def _clear(self):
         self.__stop_event.clear()
 
         self.__processes.clear()
         self.__watch_process_threads.clear()
         self.__monitor_threads.clear()
+        self.__dispatch_threads.clear()
 
     def start(self):
         if self.__started:
@@ -408,6 +458,15 @@ class ParallelExecutor(object):
         thread_health.start()
         self.__monitor_threads.append(thread_health)
 
+        # dispatch
+        thread_dispatch = threading.Thread(
+            target=self._thread_dispatch_output,
+            args=(),
+            daemon=True,
+        )
+        thread_dispatch.start()
+        self.__dispatch_threads.append(thread_dispatch)
+
         # use probe check initialize ready
         try:
             if not self.probe():
@@ -421,28 +480,28 @@ class ParallelExecutor(object):
         sync_id = self.__sync_id
         self.__sync_id += 1
 
+        future = WritableFuture()
+
         input_msg = Message(
             type=MessageType.PROBE,
             sync_id=sync_id,
             payload=None,
             source='__input__',
         )
+
+        with self.__futures_lock:
+            self.__futures[sync_id] = future
+
         for q in self.__input_queues:
             q.put(input_msg)
 
-        try:
-            output_msg: Message = self.__final_queue.get()
-        except queue.Empty:
-            raise RuntimeError('queue has been closed unexpectedly')
+        return future.wait() and future.error is None
 
-        if output_msg.type != MessageType.PROBE:
-            raise RuntimeError(f'probe test failed with message: {output_msg}')
-
-        return output_msg.sync_id == sync_id
-
-    def execute(self, payload: Any, timeout = None) -> list[Any]:
+    def submit(self, payload: Any, cascade: Callable[[Any], Any] | None = None) -> Future:
         sync_id = self.__sync_id
         self.__sync_id += 1
+
+        future = WritableFuture(cascade=cascade)
 
         input_msg = Message(
             type=MessageType.DATA,
@@ -451,24 +510,17 @@ class ParallelExecutor(object):
             source='__input__',
         )
 
+        with self.__futures_lock:
+            self.__futures[sync_id] = future
+
         for q in self.__input_queues:
             q.put(input_msg)
 
-        try:
-            output_msg: Message = self.__final_queue.get(timeout=timeout)
-        except queue.Empty:
-            return []
+        return future
 
-        if output_msg.type == MessageType.DATA:
-            return output_msg.payload
-
-        if output_msg.type == MessageType.STOP:
-            raise RuntimeError('executor stopped')
-
-        if output_msg.type == MessageType.ERROR:
-            raise RuntimeError(f'received error from node {output_msg.source} {output_msg.payload}')
-
-        raise RuntimeError(f'received unexpected message: {output_msg}')
+    def execute(self, pyload: Any, timeout: float | None = None) -> list[Any]:
+        future = self.submit(pyload)
+        return future.get(timeout=timeout)
 
     def action(self, data: Any):
         action_msg = Message(

@@ -13,6 +13,7 @@ from fabopsy_lib.utils.cuda import list_nvidia_devices
 from fabopsy_lib.utils.logger import logger
 from fabopsy_lib import schema
 from fabopsy_lib.runtime.parallel.executor import Executor, ParallelExecutor
+from fabopsy_lib.runtime.parallel.future import Future, WritableFuture
 
 
 __all__ = [
@@ -293,9 +294,15 @@ class ParallelRunner(object):
     def inputs(self) -> list[str]:
         return self.__inputs
 
-    def run(self, data: dict[str, Any] | Any, timestamp: float = None) -> dict[str, Any]:
+    def run_async(
+            self,
+            data: dict[str, Any] | Any,
+            timestamp: float = None,
+    ) -> Future[dict[str, Any]]:
         if not self.__graph:
-            return {}
+            future = WritableFuture()
+            future.set_result({})
+            return future
 
         # get timestamp
         if timestamp is None:
@@ -313,18 +320,29 @@ class ParallelRunner(object):
             'time': timestamp,
             'frame_tick': self.__frame_tick,
         }
+        self.__frame_tick += 1
 
         exchange_data = ExchangeData(
             data=data,
             report=report,
         )
-        output_data: list[ExchangeData] = self.__parallel_executor.execute(exchange_data)
-        for data in output_data:
-            report.update(data.report)
+        def merge_data(output_data: list[ExchangeData]) -> dict[str, Any]:
+            local_report = copy.copy(report)
+            for data in output_data:
+                local_report.update(data.report)
+            return local_report
 
-        self.__frame_tick += 1
+        future = self.__parallel_executor.submit(exchange_data, cascade=merge_data)
 
-        return report
+        return future
+
+    def run(
+            self,
+            data: dict[str, Any] | Any,
+            timestamp: float = None,
+            timeout: float = None,
+    ) -> dict[str, Any]:
+        return self.run_async(data, timestamp).get(timeout=timeout)
 
     def reset(self):
         self.__frame_tick = self.__start_frame_tick
