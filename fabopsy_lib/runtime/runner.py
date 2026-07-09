@@ -14,6 +14,9 @@ from fabopsy_lib.utils.logger import logger
 
 __all__ = [
     'Runner',
+    'PipelineHasProblem',
+    'PipelineUnsatisfied',
+    'MissingInputModal',
 ]
 
 

@@ -14,23 +14,12 @@ from fabopsy_lib.utils.logger import logger
 from fabopsy_lib import schema
 from fabopsy_lib.runtime.parallel.executor import Executor, ParallelExecutor
 from fabopsy_lib.runtime.parallel.future import Future, WritableFuture
+from fabopsy_lib.runtime.runner import PipelineHasProblem, PipelineUnsatisfied, MissingInputModal
 
 
 __all__ = [
     'ParallelRunner',
 ]
-
-
-class PipelineHasProblem(Exception):
-    pass
-
-
-class PipelineUnsatisfied(Exception):
-    pass
-
-
-class MissingInputModal(Exception):
-    pass
 
 
 class PackageNode(object):
@@ -328,8 +317,8 @@ class ParallelRunner(object):
         )
         def merge_data(output_data: list[ExchangeData]) -> dict[str, Any]:
             local_report = copy.copy(report)
-            for data in output_data:
-                local_report.update(data.report)
+            for ex in output_data:
+                local_report.update(ex.report)
             return local_report
 
         future = self.__parallel_executor.submit(exchange_data, cascade=merge_data)

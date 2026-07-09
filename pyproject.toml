@@ -1,6 +1,6 @@
 [project]
 name = "fabopsy-lib"
-version = "0.0.1"
+version = "0.0.2"
 description = "Face and body based psychology analysis"
 readme = "README.md"
 requires-python = ">=3.10"

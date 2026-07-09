@@ -48,6 +48,10 @@ def calculate_iou(det1: Detection, det2: Detection) -> float:
 def max_select(detections: list[Detection]) -> int:
     if not detections:
         return -1
+
+    if len(detections) == 1:
+        return 0
+    
     detections = copy.deepcopy(detections)
     for i, det in enumerate(detections):
         x1, y1, x2, y2 = det['xyxy']
