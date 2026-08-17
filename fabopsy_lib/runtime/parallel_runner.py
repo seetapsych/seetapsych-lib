@@ -179,6 +179,8 @@ class ParallelRunner(object):
             pipeline: Pipeline,
             device: api.Device | str | dict[str, api.Device | str] = None,
             *, cache_dir: str = None):
+        self.__parallel_executor: ParallelExecutor | None = None
+
         global_device: Optional[api.Device] = None
         attribute_device_map: dict[str, api.Device] = {}
         device_pool: list[api.Device] = []
@@ -288,6 +290,8 @@ class ParallelRunner(object):
             data: dict[str, Any] | Any,
             timestamp: float = None,
     ) -> Future[dict[str, Any]]:
+        assert self.__parallel_executor is not None
+
         if not self.__graph:
             future = WritableFuture()
             future.set_result({})
@@ -334,13 +338,16 @@ class ParallelRunner(object):
         return self.run_async(data, timestamp).get(timeout=timeout)
 
     def reset(self):
+        assert self.__parallel_executor is not None
+
         self.__frame_tick = self.__start_frame_tick
 
         exchange_action = ExchangeAction(action='reset')
         self.__parallel_executor.action(exchange_action)
 
     def dispose(self):
-        self.__parallel_executor.dispose()
+        if self.__parallel_executor is not None:
+            self.__parallel_executor.dispose()
 
     def __del__(self):
         self.dispose()
