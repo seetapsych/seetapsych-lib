@@ -39,3 +39,6 @@ fabopsy_lib = [
     "modules/*.yaml",
     "modules/*.yml"
 ]
+
+[project.scripts]
+fabopsy-webui = "fabopsy_lib.webui.cli:main"
