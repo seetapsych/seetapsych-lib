@@ -5,6 +5,7 @@ import threading
 import time
 import traceback
 import multiprocessing as mp
+from collections import defaultdict
 from enum import Enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -45,6 +46,7 @@ class NodeSpec:
     executor: Executor
     health: mp.Queue
     stop: sc.Event
+    time: Optional[mp.Queue] = None
 
 
 @dataclass
@@ -70,6 +72,32 @@ class Message:
     sync_id: Optional[int] = None
     payload: Any = None
     source: Optional[str] = None
+
+
+@dataclass
+class TimeEvent:
+    tag: str
+    time_seconds: float
+
+
+class TimeSummary(object):
+    def __init__(self):
+        self.__lock = threading.Lock()
+        self.__summary: dict[str, list[float | int]] = defaultdict(lambda: [int(0), float(0)])
+
+    def add(self, tag: str, time_seconds: float):
+        with self.__lock:
+            value = self.__summary[tag]
+            value[0] += 1
+            value[1] += time_seconds
+
+    def clear(self):
+        with self.__lock:
+            self.__summary.clear()
+
+    def summary(self) -> dict[str, float]:
+        with self.__lock:
+            return { tag: round(value[1] / value[0], 3)  for tag, value in self.__summary.items() }
 
 
 def process_node_main(spec: NodeSpec):
@@ -185,7 +213,9 @@ def process_node_main(spec: NodeSpec):
             payloads = [msg.payload for msg in input_messages]
             try:
                 output_type = MessageType.DATA
+                start_time_seconds = time.time()
                 output_payload = spec.executor.run(*payloads)
+                time_seconds = time.time() - start_time_seconds
             except Exception:
                 output_type = MessageType.ERROR
                 output_payload = traceback.format_exc()
@@ -197,6 +227,8 @@ def process_node_main(spec: NodeSpec):
             )
             for q in spec.outputs:
                 q.put(output)
+            if spec.time is not None:
+                spec.time.put(TimeEvent(tag=spec.name, time_seconds=time_seconds))
 
         spec.health.put(
             HealthEvent(
@@ -228,9 +260,10 @@ class GatherExecutor(Executor):
 
 
 class ParallelExecutor(object):
-    def __init__(self):
+    def __init__(self, profile: bool = False):
         self.__stop_event = mp.Event()
         self.__health_queue = mp.Queue()
+        self.__time_queue = mp.Queue()
 
         self.__id = 1   # 0 for input, -1 for output
         self.__nodes: dict[int, NodeSpec] = {}
@@ -265,6 +298,10 @@ class ParallelExecutor(object):
         self.__futures_lock = threading.Lock()
         self.__dispatch_threads: list[threading.Thread] = []
 
+        # for time summary
+        self.__profile = profile
+        self.__time_summary = TimeSummary()
+
     def register(self, name: str, executor: Executor, inputs: Optional[list[int]] = None) -> int:
         if not inputs:
             inputs = [0]
@@ -276,6 +313,7 @@ class ParallelExecutor(object):
             executor=executor,
             health=self.__health_queue,
             stop=self.__stop_event,
+            time=self.__time_queue if self.__profile else None,
         )
 
         node_id = self.__id
@@ -370,6 +408,19 @@ class ParallelExecutor(object):
                 self.stop()
                 break
 
+    def _thread_watch_time(self):
+        # has running process
+        while not self.__stop_event.is_set():
+            try:
+                event: TimeEvent = self.__time_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+
+            if event is None:
+                break
+
+            self.__time_summary.add(event.tag, event.time_seconds)
+
     def _thread_dispatch_output(self):
         while not self.__stop_event.is_set():
 
@@ -421,6 +472,11 @@ class ParallelExecutor(object):
         self.__monitor_threads.clear()
         self.__dispatch_threads.clear()
 
+        self.__time_summary.clear()
+
+    def time_summary(self) -> dict[str, float]:
+        return self.__time_summary.summary()
+
     def start(self):
         if self.__started:
             raise RuntimeError('cannot start a running parallel executor')
@@ -457,6 +513,15 @@ class ParallelExecutor(object):
         )
         thread_health.start()
         self.__monitor_threads.append(thread_health)
+
+        # watch time
+        thread_time = threading.Thread(
+            target=self._thread_watch_time,
+            args=(),
+            daemon=True,
+        )
+        thread_time.start()
+        self.__monitor_threads.append(thread_time)
 
         # dispatch
         thread_dispatch = threading.Thread(
@@ -552,6 +617,7 @@ class ParallelExecutor(object):
         self.__final_queue.put(stop_msg)
 
         self.__health_queue.put(None)
+        self.__time_queue.put(None)
 
     def terminate(self):
         for p in self.__processes.values():

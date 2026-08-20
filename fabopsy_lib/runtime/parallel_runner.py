@@ -178,7 +178,7 @@ class ParallelRunner(object):
             self,
             pipeline: Pipeline,
             device: api.Device | str | dict[str, api.Device | str] = None,
-            *, cache_dir: str = None):
+            *, cache_dir: str = None, profile: bool = False):
         self.__parallel_executor: ParallelExecutor | None = None
 
         global_device: Optional[api.Device] = None
@@ -257,7 +257,7 @@ class ParallelRunner(object):
         if not satisfied:
             raise PipelineUnsatisfied(unsatisfaction)
 
-        parallel_executor = ParallelExecutor()
+        parallel_executor = ParallelExecutor(profile=profile)
 
         package_nodes = build_graph(pipeline.config.packages)
         node_executor_ids: dict[PackageNode, int] = {}
@@ -351,6 +351,9 @@ class ParallelRunner(object):
 
     def __del__(self):
         self.dispose()
+
+    def time_summary(self) -> dict[str, float]:
+        return self.__parallel_executor.time_summary()
 
 
 def test():
