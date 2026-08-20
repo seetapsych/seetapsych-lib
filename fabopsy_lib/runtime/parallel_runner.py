@@ -353,7 +353,9 @@ class ParallelRunner(object):
         self.dispose()
 
     def time_summary(self) -> dict[str, float]:
-        return self.__parallel_executor.time_summary()
+        if self.__parallel_executor is not None:
+            return self.__parallel_executor.time_summary()
+        return {}
 
 
 def test():

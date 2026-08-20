@@ -213,9 +213,9 @@ def process_node_main(spec: NodeSpec):
             payloads = [msg.payload for msg in input_messages]
             try:
                 output_type = MessageType.DATA
-                start_time_seconds = time.time()
+                start_time_seconds = time.perf_counter()
                 output_payload = spec.executor.run(*payloads)
-                time_seconds = time.time() - start_time_seconds
+                time_seconds = time.perf_counter() - start_time_seconds
             except Exception:
                 output_type = MessageType.ERROR
                 output_payload = traceback.format_exc()
@@ -641,9 +641,9 @@ class ParallelExecutor(object):
             wait_seconds = 1
 
         def wait():
-            wait_until = time.time() + wait_seconds
+            wait_until = time.perf_counter() + wait_seconds
             for p in self.__processes.values():
-                now = time.time()
+                now = time.perf_counter()
                 if now >= wait_until:
                     break
                 p.join(wait_until - now)

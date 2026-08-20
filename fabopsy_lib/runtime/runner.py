@@ -2,6 +2,7 @@
 
 import copy
 import time
+from collections import defaultdict
 from typing import Any
 
 from fabopsy_lib import api
@@ -32,8 +33,27 @@ class MissingInputModal(Exception):
     pass
 
 
+class TimeSummary(object):
+    def __init__(self):
+        self.__summary: dict[str, list[float | int]] = defaultdict(lambda: [int(0), float(0)])
+
+    def add(self, tag: str, time_seconds: float):
+        value = self.__summary[tag]
+        value[0] += 1
+        value[1] += time_seconds
+
+    def clear(self):
+        self.__summary.clear()
+
+    def summary(self) -> dict[str, float]:
+        return { tag: round(value[1] / value[0], 3)  for tag, value in self.__summary.items() }
+
+
 class Runner(object):
-    def __init__(self, pipeline: Pipeline, device: api.Device | str = None, *, cache_dir: str = None):
+    def __init__(
+            self,
+            pipeline: Pipeline, device: api.Device | str = None,
+            *, cache_dir: str = None, profile: bool = False):
         if isinstance(device, str):
             device = api.Device(device)
 
@@ -90,6 +110,9 @@ class Runner(object):
             instance = loaded_package.create(models=models, parameters=parameters, device=device)
             self.__instances.append(instance)
 
+        self.__profile = profile
+        self.__time_summary = TimeSummary()
+
     @property
     def inputs(self) -> list[str]:
         return self.__inputs
@@ -118,14 +141,19 @@ class Runner(object):
         }
 
         # inference each instance
-        for instance in self.__instances:
+        for package, instance in zip(self.__pipeline.packages, self.__instances):
+            start_time_seconds = time.perf_counter()
             update = instance.inference(data=data, report=report)
+            time_seconds = time.perf_counter() - start_time_seconds
 
             if update:
                 report.update(update)
 
             updates.append(copy.deepcopy(update))
             reports.append(copy.deepcopy(report))
+
+            if self.__profile:
+                self.__time_summary.add(package.name, time_seconds)
 
         self.__frame_tick += 1
 
@@ -140,6 +168,9 @@ class Runner(object):
         for instance in self.__instances:
             instance.dispose()
         self.__instances.clear()
+
+    def time_summary(self) -> dict[str, float]:
+        return self.__time_summary.summary()
 
 
 def test():
