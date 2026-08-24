@@ -1161,16 +1161,16 @@ def page_run():
 @st.cache_resource(show_spinner=True)
 def load_factory(
         dirs: list[str] = None, files: list[str] = None, urls: list[str] = None,
-        disable_builtin: bool = False
+        disable_builtin: bool = False, disable_default: bool = False,
 ) -> Factory:
     dirs = dirs or []
     files = files or []
     urls = urls or []
 
-    factory = Factory()
-
-    if not disable_builtin:
-        factory.load_builtin_modules()
+    factory = Factory(
+        disable_builtin=disable_builtin,
+        disable_default=disable_default,
+    )
 
     for d in dirs:
         factory.load_dir_modules(d)
@@ -1218,6 +1218,7 @@ class Args(Protocol):
     files: list[str]
     urls: list[str]
     disable_builtin: bool = False
+    disable_default: bool = False
     cache_dir: str = None
     upload_dir: str = None
     log: str = None
@@ -1242,6 +1243,7 @@ def initialize(args: Args):
             files=args.files,
             urls=args.urls,
             disable_builtin=args.disable_builtin,
+            disable_default=args.disable_default,
         )
     if session_state.cache_dir is None and args.cache_dir:
         session_state.cache_dir = args.cache_dir
@@ -1288,6 +1290,12 @@ def parse_args() -> Args:
         '--disable-builtin',
         action='store_true',
         help='Diable load builtin modules.'
+    )
+
+    parser.add_argument(
+        '--disable-default',
+        action='store_true',
+        help='Diable load default modules.'
     )
 
     parser.add_argument(

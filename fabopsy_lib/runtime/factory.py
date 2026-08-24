@@ -5,7 +5,7 @@ from typing import IO, Iterable
 from fabopsy_lib import schema
 from fabopsy_lib.utils.pencilbox import unique_list
 from fabopsy_lib.runtime.module import (
-    LoadedModule, load_builtin_modules,
+    LoadedModule, load_builtin_modules, load_default_modules,
     load_dir_modules, load_local_module, load_url_module
 )
 
@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 class Factory(object):
-    def __init__(self):
+    def __init__(self, *, disable_builtin: bool=False, disable_default: bool=False):
         self.__modules: list[LoadedModule] = []
 
         self.__module_uid_map: dict[schema.Uid, schema.Module] = {}
@@ -25,6 +25,13 @@ class Factory(object):
         self.__parameter_map: dict[tuple[schema.Uid, str], schema.Parameter] = {}
 
         self.__attribute_providers: dict[str, list[schema.Package]] = {}
+
+        if not disable_builtin:
+            self.load_builtin_modules()
+
+        if not disable_default:
+            self.load_default_modules()
+
 
     def append(self, module: LoadedModule):
         # Even if there are duplicate UIDs, in most cases, factory operations will still work without issues.
@@ -53,6 +60,9 @@ class Factory(object):
 
     def load_builtin_modules(self):
         self.extend(load_builtin_modules())
+
+    def load_default_modules(self):
+        self.extend(load_default_modules())
 
     def load_dir_modules(self, root: str):
         self.extend(load_dir_modules(root))

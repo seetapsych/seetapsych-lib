@@ -8,17 +8,25 @@ from dataclasses import dataclass
 from typing import IO, Optional
 
 from fabopsy_lib import schema
+from fabopsy_lib.utils.dirs import appdirs
 from fabopsy_lib.utils.loader import load, loads
 from fabopsy_lib.utils.logger import logger
 
 
 __all__ = [
     'LoadedModule',
+    'default_config_dir',
     'load_builtin_modules',
+    'load_default_modules',
     'load_dir_modules',
     'load_local_module',
     'load_url_module',
 ]
+
+
+def default_config_dir() -> str:
+    config_dir = os.environ.get('FABOPSY_CONFIG_DIR', '') or appdirs.user_data_dir
+    return os.path.join(config_dir, 'configs')
 
 
 @dataclass
@@ -32,6 +40,10 @@ builtin_module_root = os.path.join(os.path.dirname(__file__), '..', 'modules')
 
 def load_builtin_modules() -> list[LoadedModule]:
     return load_dir_modules(builtin_module_root)
+
+
+def load_default_modules() -> list[LoadedModule]:
+    return load_dir_modules(default_config_dir())
 
 
 def load_dir_modules(root: str) -> list[LoadedModule]:
