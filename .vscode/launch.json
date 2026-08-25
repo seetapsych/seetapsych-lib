@@ -10,38 +10,8 @@
         "run",
         "seetapsych_lib/webui/app.py",
         "--",
-        "--disable-builtin",
-        "--dirs",
-        "${workspaceFolder}/seetapsych_lib/example",
         "--log",
         "INFO"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "justMyCode": true,
-      "subProcess": true,
-      "env": {
-        "PYTHONUNBUFFERED": "1"
-      }
-    },
-    {
-      "name": "SeetaPsych WebUI (Streamlit, custom cache/upload)",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "streamlit",
-      "args": [
-        "run",
-        "seetapsych_lib/webui/app.py",
-        "--",
-        "--disable-builtin",
-        "--dirs",
-        "${workspaceFolder}/seetapsych_lib/example",
-        "--log",
-        "DEBUG",
-        "--cache-dir",
-        "${workspaceFolder}/.cache",
-        "--upload-dir",
-        "${workspaceFolder}/.upload"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
