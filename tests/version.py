@@ -1,33 +1,38 @@
 # -*- coding: utf-8 -*-
 
-import os.path
 from typing import Optional
 
-import tomli
+from packaging.version import Version, InvalidVersion
 
 import fabopsy_lib
-import fabopsy_lib.api
 from fabopsy_lib.utils.logger import logger
 
 
 def main() -> Optional[int]:
-    project_toml = os.path.join(os.path.dirname(__file__), '..', 'pyproject.toml')
+    released_version = fabopsy_lib.__version__
+    dev_version = fabopsy_lib.get_version()
 
-    with open(project_toml, 'rb') as f:
-        project = tomli.load(f)
+    print(f"released   (__version__ attribute): {released_version!r}")
+    print(f"developing (get_version(), runtime): {dev_version!r}")
 
-    project_version = project['project']['version']
-    library_version = fabopsy_lib.__version__
+    try:
+        rv = Version(released_version)
+        dv = Version(dev_version)
+    except InvalidVersion as exc:
+        logger.error(f"invalid PEP 440 version: {exc}")
+        return 2
 
-    if project_version != library_version:
-        logger.warning(f"project and library version mismatch:\n"
-                       f"\tfabopsy_lib.__version__ = '{library_version}'\n"
-                       f"\tpyproject.toml > project > version = '{project_version}'")
-        print(library_version)
+    if rv > dv:
+        logger.warning(
+            "released version is NEWER than the in-memory developing version;"
+            " this usually means the built ``_version.py`` is stale (re-run the"
+            " build / uv sync) or the tag history was rewritten.\n"
+            f"  released  : {released_version}\n"
+            f"  developing: {dev_version}"
+        )
         return 1
-    else:
-        print(library_version)
-        return 0
+
+    return 0
 
 
 if __name__ == '__main__':

@@ -21,6 +21,9 @@
 *.log
 .env
 
+# generated files
+fabopsy_lib/_version.py
+
 # compiled files
 *.pyc
 __pycache__/
