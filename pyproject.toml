@@ -1,6 +1,6 @@
 [project]
 name = "seetapsych-lib"
-description = "Face and body based psychology analysis"
+description = "A Computer Vision Toolkit for Face-based Psychological Measurement"
 readme = "README.md"
 requires-python = ">=3.10"
 dynamic = ["version"]
