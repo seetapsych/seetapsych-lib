@@ -185,6 +185,9 @@ class Package(Entity):
     inputs: list[str] = Field([], description='Lists input modalities if this package is multimodal')
     requires: list[str] = Field([], description='Attributes required to run this package')
     provides: list[str] = Field([], description='Attributes provided by this package')
+    priority: int = Field(
+        0,
+        description='Selection priority when multiple packages provide the same attribute. Higher value wins. Defaults to 0')
     entry: Entry = Field(
         description='Python entry for loading this package. The entry should return @ref seetapsych_lib.api.Package')
     parameters: list[Parameter] = Field([], description='Parameters for controlling the package')

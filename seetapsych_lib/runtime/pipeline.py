@@ -656,8 +656,7 @@ class Pipeline(object):
                     continue
 
                 # select provider
-                # TODO: Design a more reasonable algorithm to select providers
-                provider = max(providers, key=lambda x: x.format_version)
+                provider = max(providers, key=lambda x: (x.priority, x.format_version))
                 if self._add_package(provider):
                     logger.info(f'Solve required package [{provider.name}]({provider.uid})'
                                 f' for attribute {attr}')

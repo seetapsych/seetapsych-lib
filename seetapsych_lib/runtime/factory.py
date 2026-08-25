@@ -106,7 +106,8 @@ class Factory(object):
         return self.__model_uid_map_package.get(uid, None)
 
     def query_attribute_providers(self, attr: str) -> list[schema.Package]:
-        return self.__attribute_providers.get(attr, [])
+        providers = self.__attribute_providers.get(attr, [])
+        return sorted(providers, key=lambda x: x.priority, reverse=True)
 
     def query_parameter(self, uid: schema.Uid, name: str) -> schema.Parameter | None:
         return self.__parameter_map.get((uid, name), None)

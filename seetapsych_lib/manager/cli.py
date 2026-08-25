@@ -377,6 +377,7 @@ def show_configs(args: argparse.Namespace) -> None:
                         lines.append(f'          description : {p.description}')
                     if p.keywords:
                         lines.append(f'          keywords    : {", ".join(p.keywords)}')
+                    lines.append(f'          priority    : {p.priority}')
                     if p.provides:
                         lines.append(f'          provides    : {", ".join(p.provides)}')
                     if p.requires:
