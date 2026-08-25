@@ -2,17 +2,17 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Fabopsy WebUI (Streamlit)",
+      "name": "SeetaPsych WebUI (Streamlit)",
       "type": "debugpy",
       "request": "launch",
       "module": "streamlit",
       "args": [
         "run",
-        "fabopsy_lib/webui/app.py",
+        "seetapsych_lib/webui/app.py",
         "--",
         "--disable-builtin",
         "--dirs",
-        "${workspaceFolder}/fabopsy_lib/example",
+        "${workspaceFolder}/seetapsych_lib/example",
         "--log",
         "INFO"
       ],
@@ -25,17 +25,17 @@
       }
     },
     {
-      "name": "Fabopsy WebUI (Streamlit, custom cache/upload)",
+      "name": "SeetaPsych WebUI (Streamlit, custom cache/upload)",
       "type": "debugpy",
       "request": "launch",
       "module": "streamlit",
       "args": [
         "run",
-        "fabopsy_lib/webui/app.py",
+        "seetapsych_lib/webui/app.py",
         "--",
         "--disable-builtin",
         "--dirs",
-        "${workspaceFolder}/fabopsy_lib/example",
+        "${workspaceFolder}/seetapsych_lib/example",
         "--log",
         "DEBUG",
         "--cache-dir",

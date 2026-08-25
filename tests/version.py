@@ -4,13 +4,13 @@ from typing import Optional
 
 from packaging.version import Version, InvalidVersion
 
-import fabopsy_lib
-from fabopsy_lib.utils.logger import logger
+import seetapsych_lib
+from seetapsych_lib.utils.logger import logger
 
 
 def main() -> Optional[int]:
-    released_version = fabopsy_lib.__version__
-    dev_version = fabopsy_lib.get_version()
+    released_version = seetapsych_lib.__version__
+    dev_version = seetapsych_lib.get_version()
 
     print(f"released   (__version__ attribute): {released_version!r}")
     print(f"developing (get_version(), runtime): {dev_version!r}")

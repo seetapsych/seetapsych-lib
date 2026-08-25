@@ -1,8 +1,8 @@
-# FaboPsy Lib
+# SeetaPsych Lib
 
 > Face and body based psychology analysis
 
-FaboPsy Lib is a Python library for face- and body-based psychology analysis.
+SeetaPsych Lib is a Python library for face- and body-based psychology analysis.
 It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
 
 ## Requirements
@@ -43,7 +43,7 @@ python -m pip install streamlit opencv-python
 ### Run WebUI (Streamlit)
 
 ```sh
-streamlit run fabopsy_lib/webui/app.py -- --log INFO
+streamlit run seetapsych_lib/webui/app.py -- --log INFO
 ```
 
 Common arguments (pass them after `--`):
@@ -61,12 +61,12 @@ Common arguments (pass them after `--`):
 ```python
 import numpy as np
 
-from fabopsy_lib.api import Device
-from fabopsy_lib.runtime import Factory, Pipeline, Runner
+from seetapsych_lib.api import Device
+from seetapsych_lib.runtime import Factory, Pipeline, Runner
 
 factory = Factory()
 factory.load_builtin_modules()
-factory.load_local_module("fabopsy_lib/example/example.toml")
+factory.load_local_module("seetapsych_lib/example/example.toml")
 
 pkg = next(p for p in factory.packages if p.name == "Example Package")
 
@@ -91,8 +91,9 @@ The following environment variables are supported:
 
 | Env               | Description                                                                      |
 |:------------------|:---------------------------------------------------------------------------------|
-| FABOPSY_LOG_LEVEL | Change default log level. Could be `WARNING`, `INFO`, `DEBUG`, or an integer (e.g., `10`). |
-| FABOPSY_CACHE_DIR | Base directory for model cache. Models are cached under `<CACHE_DIR>/models`.     |
+| SEETAPSYCH_LOG_LEVEL | Change default log level. Could be `WARNING`, `INFO`, `DEBUG`, or an integer (e.g., `10`). |
+| SEETAPSYCH_CACHE_DIR | Base directory for model cache. Models are cached under `<CACHE_DIR>/models`.     |
+| SEETAPSYCH_CONFIG_DIR | Base directory for config files. Config files are loaded from `<CONFIG_DIR>/configs`. |
 
 ## Development
 

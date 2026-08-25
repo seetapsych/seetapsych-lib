@@ -22,7 +22,7 @@ import traceback
 from typing import Callable, Any
 
 
-from fabopsy_lib.runtime.parallel.executor import *
+from seetapsych_lib.runtime.parallel.executor import *
 
 
 # -----------------------------------------------------------------------------

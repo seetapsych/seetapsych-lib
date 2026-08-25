@@ -4,7 +4,7 @@ import os
 import sys
 from datetime import datetime
 
-from fabopsy_configs import ConfigInfo, configs
+from seetapsych_configs import ConfigInfo, configs
 
 
 TEMPLATE_NAME = 'template_doc_configs.md'

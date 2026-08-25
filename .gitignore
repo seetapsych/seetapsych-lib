@@ -22,7 +22,7 @@
 .env
 
 # generated files
-fabopsy_lib/_version.py
+seetapsych_lib/_version.py
 
 # compiled files
 *.pyc

@@ -401,7 +401,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fabopsy-lib"
+name = "seetapsych-lib"
 source = { editable = "." }
 dependencies = [
     { name = "jsonschema2md" },
@@ -432,7 +432,7 @@ webui = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "fabopsy-lib", extra = ["dev"] },
+    { name = "seetapsych-lib", extra = ["dev"] },
 ]
 
 [package.metadata]
@@ -459,7 +459,7 @@ requires-dist = [
 provides-extras = ["dev", "webui"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "fabopsy-lib", extras = ["dev"] }]
+dev = [{ name = "seetapsych-lib", extras = ["dev"] }]
 
 [[package]]
 name = "filelock"

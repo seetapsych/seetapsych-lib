@@ -1,5 +1,5 @@
 [project]
-name = "fabopsy-lib"
+name = "seetapsych-lib"
 description = "Face and body based psychology analysis"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,7 +20,7 @@ webui = [
     "streamlit>=1.53.0",
 ]
 dev = [
-    "fabopsy-lib[webui]",
+    "seetapsych-lib[webui]",
     "onnxruntime-gpu>=1.24; python_version > '3.10'",
     "onnxruntime-gpu<1.24; python_version <= '3.10'",
     "opencv-python>=4.13.0.90",
@@ -32,12 +32,12 @@ dev = [
 ]
 
 [project.scripts]
-fabopsy-webui = "fabopsy_lib.webui.cli:main"
-fabopsy-manager = "fabopsy_lib.manager.cli:main"
+seetapsych-webui = "seetapsych_lib.webui.cli:main"
+seetapsych-manager = "seetapsych_lib.manager.cli:main"
 
 [dependency-groups]
 dev = [
-    "fabopsy-lib[dev]",
+    "seetapsych-lib[dev]",
 ]
 
 [tool.uv]
@@ -49,14 +49,14 @@ fallback-version = "0.0.0.dev0"
 tag-pattern = "^r(?P<version>[^-]+)$"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "fabopsy_lib/_version.py"
+version-file = "seetapsych_lib/_version.py"
 
 [build-system]
 requires = ["hatchling>=1.26", "hatch-vcs>=0.4.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["fabopsy_lib"]
+packages = ["seetapsych_lib"]
 
 [tool.hatch.build.targets.wheel.package-data]
-fabopsy_lib = ["modules/*.yml"]
+seetapsych_lib = ["modules/*.yml"]
