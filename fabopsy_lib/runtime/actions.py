@@ -117,12 +117,25 @@ def get_pip_version() -> str | None:
         return None
 
 
+def _marker_applies(req: Requirement) -> bool:
+    if req.marker is None:
+        return True
+    try:
+        return req.marker.evaluate()
+    except Exception as e:
+        msg = f'Unable to evaluate marker for {req}: {e}'
+        logger.error(msg)
+        raise RuntimeError(msg) from e
+
+
 def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
     unsatisfied: list[str] = []
 
     for req_str in module.requirements:
         try:
             req = Requirement(req_str)
+            if not _marker_applies(req):
+                continue
             pkg_name = req.name
             installed_ver = version(pkg_name)
             if not req.specifier.contains(installed_ver):
@@ -144,6 +157,8 @@ def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
 
         try:
             req = Requirement(req_str)
+            if not _marker_applies(req):
+                continue
             pkg_name = req.name
             installed_ver = version(pkg_name)
             if not req.specifier.contains(installed_ver):
@@ -177,11 +192,30 @@ def package_manager() -> list[str]:
     return [sys.executable, '-m', 'pip']
 
 
+def _filter_applicable_requirements(requirements: list[str]) -> list[str]:
+    applicable: list[str] = []
+    for req_str in requirements:
+        try:
+            req = Requirement(req_str)
+            if _marker_applies(req):
+                applicable.append(req_str)
+        except Exception as e:
+            msg = f'Unable to parse requirement {req_str}: {e}'
+            logger.error(msg)
+            raise RuntimeError(msg) from e
+    return applicable
+
+
 def install_requirements(requirements: list[str], *, index_url: str = None, trusted_host: str | bool = None):
     if not requirements:
         return
 
-    cmd = [*package_manager(), 'install'] + requirements
+    applicable_reqs = _filter_applicable_requirements(requirements)
+    if not applicable_reqs:
+        logger.info(f'All requirements filtered out by environment markers, nothing to install: {requirements}')
+        return
+
+    cmd = [*package_manager(), 'install'] + applicable_reqs
     if index_url:
         cmd += ['--index-url', index_url]
     if trusted_host:
