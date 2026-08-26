@@ -136,7 +136,10 @@ def page_start():
             session_state.search_package = search_package
             st.rerun()
 
-        packages = [p for p in factory.packages if fuzzy_match_package(p, search_package or '')]
+        packages = sorted(
+            [p for p in factory.packages if fuzzy_match_package(p, search_package or '')],
+            key=lambda p: (-p.priority, p.name, p.version),
+        )
 
         for package in packages:
             with st.container(border=True):

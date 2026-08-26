@@ -45,6 +45,9 @@ seetapsych-manager setup
 seetapsych-manager cache
 ```
 
+The `setup` and `cache` commands can be skipped.
+When you use the WebUI or call the library programmatically later, `seetapsych-lib` can install dependencies and download necessary models on demand.
+
 ## Quick Start
 
 ### Run WebUI (Streamlit)
