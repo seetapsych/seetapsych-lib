@@ -1,0 +1,84 @@
+version: "1.0"
+
+module:
+  name: "Example Module"
+  version: "0.0.1"
+  description: "This is an example module"
+  keywords:
+    - "Example"
+    - "Module"
+  requirements:
+    - "cowsay"
+
+packages:
+  - name: "Example Package"
+    version: "0.0.1"
+    description: "This is an example package. Use to build pipeline to run."
+    keywords:
+      - "Example"
+      - "Package"
+    usage_models: []
+    inputs: []
+    provides:
+      - "example/output"
+    requires: []
+    entry:
+      method: "seetapsych_lib.example.example.load_package"
+    parameters:
+      - name: "min_face"
+        type: "integer"
+        value: 80
+        description: "Min face to detect"
+      - name: "threshold"
+        type: "number"
+        value: 0.8
+        description: "Threshold of face"
+      - name: "object_name"
+        type: "string"
+        value: "face"
+        description: "Detection target name"
+      - name: "scale"
+        type: "selection"
+        value: "big"
+        selection:
+          - "big"
+          - "small"
+        description: "Large?"
+      - name: "integer[]"
+        type: "integer[]"
+        value:
+          - 80
+        description: "Select multi integer"
+      - name: "number[]"
+        type: "number[]"
+        value:
+          - 0.8
+        description: "Select multi number"
+      - name: "string[]"
+        type: "string[]"
+        value:
+          - "face"
+        description: "Select multi string"
+      - name: "selection[]"
+        type: "selection[]"
+        value:
+          - "big"
+        selection:
+          - "big"
+          - "small"
+        description: "Select multi selection"
+      - name: "object"
+        type: "object"
+        value: {}
+        description: "Edit object"
+    models:
+      - name: "Example Model"
+        version: "0.0.1"
+        description: "This is an example model. Unable to download and cannot be persistent cached."
+        keywords:
+          - "Example"
+          - "Model"
+        usage: ""
+        recommended: true
+        entry:
+          method: "seetapsych_lib.example.example.load_model"

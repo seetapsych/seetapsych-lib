@@ -76,5 +76,5 @@ packages = ["seetapsych_lib"]
 [tool.hatch.build.targets.wheel.package-data]
 seetapsych_lib = [
     "modules/**/*.yml",
-    "example/**/*.toml",
+    "example/**/*.yml",
 ]

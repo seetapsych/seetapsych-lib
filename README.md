@@ -17,13 +17,7 @@ It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
 ### Using uv (recommended)
 
 ```sh
-uv sync
-```
-
-Install development dependencies (WebUI, etc.):
-
-```sh
-uv sync --group dev
+uv pip install seetapsych-lib[webui] seetapsych-attributes seetapsych-configs
 ```
 
 ### Using pip
@@ -31,13 +25,24 @@ uv sync --group dev
 Install runtime dependencies:
 
 ```sh
-python -m pip install .
+pip install seetapsych-lib seetapsych-attributes seetapsych-configs
 ```
 
 If you want to run the WebUI, install extra tools manually:
 
 ```sh
-python -m pip install streamlit opencv-python
+pip install seetapsych-lib[webui]
+```
+
+## Install Default Configs
+
+```sh
+# download default configs
+seetapsych-manager download
+# install each module requirements
+seetapsych-manager setup
+# download each model
+seetapsych-manager cache
 ```
 
 ## Quick Start
@@ -45,15 +50,22 @@ python -m pip install streamlit opencv-python
 ### Run WebUI (Streamlit)
 
 ```sh
+seetapsych-webui --log INFO
+```
+or
+```sh
 python -m seetapsych_lib.webui --log INFO
 ```
 
-Common arguments (pass them after `--`):
+A local browser window will open automatically, or you can manually navigate to: `http://localhost:8501`.
+
+Common arguments:
 
 - `--dirs <DIR...>`: load modules from directories
 - `--files <FILE...>`: load modules from local config files
 - `--urls <URL...>`: load modules from remote URLs
 - `--disable-builtin`: disable builtin modules
+- `--disable-default`: disable default modules
 - `--cache-dir <DIR>`: model cache directory
 - `--upload-dir <DIR>`: upload directory
 - `--log <LEVEL>`: log level (e.g., `DEBUG`, `INFO`, `WARNING`, or an integer like `10`)
@@ -94,11 +106,3 @@ The following environment variables are supported:
 | SEETAPSYCH_LOG_LEVEL | Change default log level. Could be `WARNING`, `INFO`, `DEBUG`, or an integer (e.g., `10`). |
 | SEETAPSYCH_CACHE_DIR | Base directory for model cache. Models are cached under `<CACHE_DIR>/models`.     |
 | SEETAPSYCH_CONFIG_DIR | Base directory for config files. Config files are loaded from `<CONFIG_DIR>/configs`. |
-
-## Development
-
-Version check:
-
-```sh
-python tests/version.py
-```
