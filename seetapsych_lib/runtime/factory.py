@@ -6,6 +6,7 @@ from seetapsych_lib import schema
 from seetapsych_lib.utils.pencilbox import unique_list
 from seetapsych_lib.runtime.module import (
     LoadedModule, load_builtin_modules, load_default_modules,
+    load_example_modules,
     load_dir_modules, load_local_module, load_url_module
 )
 
@@ -14,7 +15,12 @@ __all__ = [
 ]
 
 class Factory(object):
-    def __init__(self, *, disable_builtin: bool=False, disable_default: bool=False):
+    def __init__(
+            self, *,
+            disable_builtin: bool=False,
+            disable_default: bool=False,
+            enable_example: bool=False,
+        ):
         self.__modules: list[LoadedModule] = []
 
         self.__module_uid_map: dict[schema.Uid, schema.Module] = {}
@@ -31,6 +37,9 @@ class Factory(object):
 
         if not disable_default:
             self.load_default_modules()
+
+        if enable_example:
+            self.load_example_modules()
 
 
     def append(self, module: LoadedModule):
@@ -63,6 +72,9 @@ class Factory(object):
 
     def load_default_modules(self):
         self.extend(load_default_modules())
+
+    def load_example_modules(self):
+        self.extend(load_example_modules())
 
     def load_dir_modules(self, root: str):
         self.extend(load_dir_modules(root))

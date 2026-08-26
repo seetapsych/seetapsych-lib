@@ -1,8 +1,10 @@
 # SeetaPsych Lib
 
-> Face and body based psychology analysis
+> A Computer Vision Toolkit for Face-based Psychological Measurement
 
-SeetaPsych Lib is a Python library for face- and body-based psychology analysis.
+[![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
+
+SeetaPsych Lib is a Python library for face and body-based psychology analysis.
 It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
 
 ## Requirements
@@ -43,7 +45,7 @@ python -m pip install streamlit opencv-python
 ### Run WebUI (Streamlit)
 
 ```sh
-streamlit run seetapsych_lib/webui/app.py -- --log INFO
+python -m seetapsych_lib.webui --log INFO
 ```
 
 Common arguments (pass them after `--`):
@@ -64,9 +66,7 @@ import numpy as np
 from seetapsych_lib.api import Device
 from seetapsych_lib.runtime import Factory, Pipeline, Runner
 
-factory = Factory()
-factory.load_builtin_modules()
-factory.load_local_module("seetapsych_lib/example/example.toml")
+factory = Factory(enable_example=True)
 
 pkg = next(p for p in factory.packages if p.name == "Example Package")
 

@@ -18,6 +18,7 @@ __all__ = [
     'default_config_dir',
     'load_builtin_modules',
     'load_default_modules',
+    'load_example_modules',
     'load_dir_modules',
     'load_local_module',
     'load_url_module',
@@ -38,12 +39,19 @@ class LoadedModule:
 builtin_module_root = os.path.join(os.path.dirname(__file__), '..', 'modules')
 
 
+builtin_example_root = os.path.join(os.path.dirname(__file__), '..', 'example')
+
+
 def load_builtin_modules() -> list[LoadedModule]:
     return load_dir_modules(builtin_module_root)
 
 
 def load_default_modules() -> list[LoadedModule]:
     return load_dir_modules(default_config_dir())
+
+
+def load_example_modules() -> list[LoadedModule]:
+    return load_dir_modules(builtin_example_root)
 
 
 def load_dir_modules(root: str) -> list[LoadedModule]:
