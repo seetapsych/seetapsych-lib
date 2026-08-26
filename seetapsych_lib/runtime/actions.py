@@ -128,6 +128,15 @@ def _marker_applies(req: Requirement) -> bool:
         raise RuntimeError(msg) from e
 
 
+def _strip_marker(req_str: str) -> str:
+    try:
+        req = Requirement(req_str)
+        req.marker = None
+        return str(req)
+    except Exception:
+        return req_str
+
+
 def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
     unsatisfied: list[str] = []
 
@@ -139,9 +148,9 @@ def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
             pkg_name = req.name
             installed_ver = version(pkg_name)
             if not req.specifier.contains(installed_ver):
-                unsatisfied.append(req_str)
+                unsatisfied.append(_strip_marker(req_str))
         except PackageNotFoundError:
-            unsatisfied.append(req_str)
+            unsatisfied.append(_strip_marker(req_str))
         except Exception as e:
             msg = f'Unable to check satisfaction {req_str}: {e}'
             logger.error(msg)
@@ -198,7 +207,7 @@ def _filter_applicable_requirements(requirements: list[str]) -> list[str]:
         try:
             req = Requirement(req_str)
             if _marker_applies(req):
-                applicable.append(req_str)
+                applicable.append(_strip_marker(req_str))
         except Exception as e:
             msg = f'Unable to parse requirement {req_str}: {e}'
             logger.error(msg)
