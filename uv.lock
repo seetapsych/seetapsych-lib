@@ -2525,7 +2525,7 @@ dependencies = [
     { name = "platformdirs" },
     { name = "pydantic" },
     { name = "pyyaml" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomli" },
     { name = "tqdm" },
 ]
 
@@ -2535,6 +2535,9 @@ dev = [
     { name = "build" },
     { name = "huggingface-hub" },
     { name = "modelscope" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' and sys_platform == 'darwin'" },
     { name = "onnxruntime", version = "1.29.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' and sys_platform == 'darwin'" },
     { name = "onnxruntime-gpu", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' and sys_platform != 'darwin'" },
@@ -2544,6 +2547,10 @@ dev = [
     { name = "twine" },
 ]
 webui = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "opencv-python" },
     { name = "streamlit" },
 ]
 
@@ -2559,19 +2566,22 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'dev'", specifier = ">=1.6.0" },
     { name = "jsonschema2md", specifier = ">=1.7.0" },
     { name = "modelscope", marker = "extra == 'dev'", specifier = ">=1.34.0" },
+    { name = "numpy", marker = "extra == 'dev'", specifier = ">=2.2.6" },
+    { name = "numpy", marker = "extra == 'webui'", specifier = ">=2.2.6" },
     { name = "nvidia-ml-py", specifier = ">=13.595.45" },
     { name = "onnxruntime", marker = "python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'dev'", specifier = ">=1.24" },
     { name = "onnxruntime", marker = "python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'dev'", specifier = "<1.24" },
     { name = "onnxruntime-gpu", marker = "python_full_version >= '3.11' and sys_platform != 'darwin' and extra == 'dev'", specifier = ">=1.24" },
     { name = "onnxruntime-gpu", marker = "python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'dev'", specifier = "<1.24" },
     { name = "opencv-python", marker = "extra == 'dev'", specifier = ">=4.13.0.90" },
+    { name = "opencv-python", marker = "extra == 'webui'", specifier = ">=4.13.0.90" },
     { name = "packaging", specifier = ">=25.0" },
     { name = "platformdirs", specifier = ">=4.5.1" },
     { name = "pydantic", specifier = ">=2.13.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "streamlit", marker = "extra == 'dev'", specifier = ">=1.53.0" },
     { name = "streamlit", marker = "extra == 'webui'", specifier = ">=1.53.0" },
-    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.3.0" },
+    { name = "tomli", specifier = ">=2.3.0" },
     { name = "tqdm", specifier = ">=4.67.2" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=6.2.0" },
 ]
