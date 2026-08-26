@@ -17,7 +17,7 @@ It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
 ### Using uv (recommended)
 
 ```sh
-uv pip install seetapsych-lib[webui] seetapsych-attributes seetapsych-configs
+uv pip install 'seetapsych-lib[webui]' seetapsych-attributes seetapsych-configs
 ```
 
 ### Using pip
@@ -31,7 +31,7 @@ pip install seetapsych-lib seetapsych-attributes seetapsych-configs
 If you want to run the WebUI, install extra tools manually:
 
 ```sh
-pip install seetapsych-lib[webui]
+pip install 'seetapsych-lib[webui]'
 ```
 
 ## Install Default Configs
