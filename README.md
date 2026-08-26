@@ -76,26 +76,53 @@ Common arguments:
 ### Programmatic Usage
 
 ```python
-import numpy as np
+# -*- coding: utf-8 -*-
 
-from seetapsych_lib.api import Device
-from seetapsych_lib.runtime import Factory, Pipeline, Runner
+import json
+import cv2
 
-factory = Factory(enable_example=True)
+from seetapsych_lib.runtime.factory import Factory
+from seetapsych_lib.runtime.pipeline import Pipeline
+from seetapsych_lib.runtime.runner import Runner
+from seetapsych_lib.runtime.parallel_runner import ParallelRunner
 
-pkg = next(p for p in factory.packages if p.name == "Example Package")
+def main():
+    # All installed algorithm modules are loaded by default during initialization
+    # You can use the `load_xxx_module(s)` methods to load specific algorithm modules
+    factory = Factory()
 
-pipeline = Pipeline(factory, packages=[pkg.uid])
-pipeline.add_model(pkg.uid, pkg.models[0].uid)
-pipeline.solve()
+    # Quickly build a workflow and declare the attribute to compute as the face feature 'face/detection'
+    # You can view all available attributes of installed algorithms using the `seetapsych-manager show` command
+    # Result fields for attributes can be found at https://github.com/seetapsych/seetapsych-attributes
+    pipeline = Pipeline(factory, attributes=['face/detection'])
 
-ok, _ = pipeline.satisfied()
-if not ok:
+    # Check for dependencies or missing issues that need to be resolved with solve()
+    print(pipeline.problem())
+    # Resolve workflow dependencies, automatically add face detection and corresponding models
+    pipeline.solve()
+
+    # Check for runtime environment issues that require installation or download to fix
+    print(pipeline.satisfied())
+    # Install missing dependencies required for the current pipeline to run
     pipeline.install_requirements()
+    # Download missing models required for the pipeline to run
+    pipeline.cache_models()
 
-runner = Runner(pipeline, device=Device("cpu"))
-result = runner.run(np.zeros((64, 64, 3), dtype=np.uint8))
-print(result)
+    # Create a basic executor
+    runner = Runner(pipeline)
+    # Or create a parallel executor
+    # runner = ParallelRunner(pipeline)
+
+    # Run the algorithm
+    report = runner.run(data={
+        'default': cv2.imread('image.jpg')
+    })
+
+    # Print the execution results
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+
+if __name__ == '__main__':
+    main()
 ```
 
 ## Configuration
