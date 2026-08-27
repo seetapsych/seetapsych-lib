@@ -1178,11 +1178,11 @@ def load_factory(
     for d in dirs:
         factory.load_dir_modules(d)
 
-    for f in files:
-        factory.load_local_module(f)
+    if files:
+        factory.load_file_modules(*files)
 
-    for u in urls:
-        factory.load_url_module(u)
+    if urls:
+        factory.load_url_modules(*urls)
 
     return factory
 

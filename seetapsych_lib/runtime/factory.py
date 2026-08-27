@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import os.path
 from typing import IO, Iterable
 
 from seetapsych_lib import schema
@@ -79,13 +80,26 @@ class Factory(object):
     def load_dir_modules(self, root: str):
         self.extend(load_dir_modules(root))
 
+    def load_file_modules(self, filepath: str | Iterable[str], /, *filepaths: str):
+        values = [filepath] if isinstance(filepath, str) else list(filepath)
+        values = [*values, *filepaths]
+
+        for p in values:
+            ext = os.path.splitext(p)[1][1:]
+            with open(p, 'r', encoding='utf-8') as f:
+                self.load_local_module(f, ext)
+
+    def load_url_modules(self, url: str | Iterable[str], /, *urls: str):
+        values = [url] if isinstance(url, str) else list(url)
+        values = [*values, *urls]
+
+        for u in values:
+            module = load_url_module(u)
+            if module is not None:
+                self.append(module)
+
     def load_local_module(self, f: str | bytes | IO[str] | IO[bytes], extension: str = None):
         module = load_local_module(f, extension)
-        if module is not None:
-            self.append(module)
-
-    def load_url_module(self, url: str):
-        module = load_url_module(url)
         if module is not None:
             self.append(module)
 
