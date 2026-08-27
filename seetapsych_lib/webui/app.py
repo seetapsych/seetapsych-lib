@@ -138,7 +138,7 @@ def page_start():
 
         packages = sorted(
             [p for p in factory.packages if fuzzy_match_package(p, search_package or '')],
-            key=lambda p: (-p.priority, p.name, p.version),
+            key=lambda p: (not bool(p.provides), tuple(p.provides), -p.priority, p.version, p.name),
         )
 
         for package in packages:
@@ -622,6 +622,9 @@ def page_install():
             for m in unsatisfaction.modules:
                 requirements = '\n'.join([f'- {r}' for r in m.requirements])
                 st.error(f'Module **{m.name}** `v{m.version}` require:\n\n{requirements}', icon=ICON_ERROR)
+            for item in unsatisfaction.imports:
+                entry_method, failed_pkg = item[0], item[1]
+                st.error(f'Failed to import `{failed_pkg}` when loading entry `{entry_method}`.', icon=ICON_ERROR)
             for m in unsatisfaction.entries:
                 prefix = m.package or ''
                 suffix = '.' + m.method if m.package else m.method

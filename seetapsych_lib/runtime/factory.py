@@ -4,6 +4,7 @@ import os.path
 from typing import IO, Iterable
 
 from seetapsych_lib import schema
+from seetapsych_lib.utils.logger import logger
 from seetapsych_lib.utils.pencilbox import unique_list
 from seetapsych_lib.runtime.module import (
     LoadedModule, load_builtin_modules, load_default_modules,
@@ -72,7 +73,13 @@ class Factory(object):
         self.extend(load_builtin_modules())
 
     def load_default_modules(self):
-        self.extend(load_default_modules())
+        modules = load_default_modules()
+        if not modules:
+            logger.warning(
+                'No default modules loaded. '
+                'Tip: You can use "seetapsych-manager download" to install the default built-in module configs.'
+            )
+        self.extend(modules)
 
     def load_example_modules(self):
         self.extend(load_example_modules())
