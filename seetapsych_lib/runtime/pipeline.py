@@ -153,9 +153,9 @@ class Pipeline(object):
         if description is not None:
             self.__config.description = description
 
-        if packages is not None:
+        if packages:
             self.add_packages(*packages)
-        if attributes is not None:
+        if attributes:
             self.add_attributes(*attributes)
         if models is not None:
             for package_uid, model_uids in models.items():
