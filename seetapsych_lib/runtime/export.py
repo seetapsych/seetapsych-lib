@@ -10,7 +10,16 @@ __all__ = [
     'flatten',
     'list2grid',
     'list2csv',
+    'truncate_str',
 ]
+
+
+def truncate_str(s: str, n: int = 32) -> str:
+    if n <= 0 or len(s) <= n:
+        return s
+    if n < 3:
+        return s[:n]
+    return s[:n - 3] + '...'
 
 
 def flatten(
@@ -34,7 +43,7 @@ def flatten(
     if map_bool is None:
         map_bool = lambda k, v: v
     if map_others is None:
-        map_others = lambda k, v: str(v)
+        map_others = lambda k, v: truncate_str(str(v), 32)
 
     class Item(NamedTuple):
         root: str
