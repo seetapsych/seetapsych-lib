@@ -10,6 +10,7 @@ module:
 packages:
   - uid: bb212f54-aace-438f-9cb7-f6519f4fef48
     name: SelectFace
+    description: Select one target face from multiple detections by max area or tracking stability
     version: 0.0.1
     usage_models: []
     inputs: []
