@@ -30,6 +30,11 @@ dependencies = [
     "nvidia-ml-py>=13.595.45",
 ]
 
+[project.urls]
+Homepage = "https://github.com/seetapsych/seetapsych-lib"
+Repository = "https://github.com/seetapsych/seetapsych-lib"
+Issues = "https://github.com/seetapsych/seetapsych-lib/issues"
+
 [project.optional-dependencies]
 webui = [
     "streamlit>=1.53.0",
