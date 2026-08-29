@@ -48,6 +48,19 @@ seetapsych-manager cache
 The `setup` and `cache` commands can be skipped.
 When you use the WebUI or call the library programmatically later, `seetapsych-lib` can install dependencies and download necessary models on demand.
 
+## Public Resources
+
+The default modules installed with `seetapsych-lib` are published and maintained at https://github.com/seetapsych/seetapsych-configs.
+To update the built-in modules to their latest versions, upgrade the configs package and re-download:
+
+```sh
+uv pip compile --upgrade-package seetapsych-configs
+seetapsych-manager download -f
+```
+
+Algorithm inputs and execution outputs are defined via `Attributes`.
+The full Attributes specification is available at https://github.com/seetapsych/seetapsych-attributes.
+
 ## Quick Start
 
 ### Run WebUI (Streamlit)
