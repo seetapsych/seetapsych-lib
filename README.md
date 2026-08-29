@@ -10,28 +10,72 @@ It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
 ## Requirements
 
 - Python >= 3.10
-- (Recommended) uv package manager: https://github.com/astral-sh/uv
+- (Recommended) uv package manager: <https://github.com/astral-sh/uv>
 
 ## Installation
 
-### Using uv (recommended)
+### Create Virtual Environment
+
+It is recommended to use an isolated virtual environment before installing dependencies.
+
+#### Using uv (recommended)
+
+```sh
+# Create a virtual environment at .venv
+uv venv
+
+# Activate (bash/zsh)
+source .venv/bin/activate
+
+# Activate (PowerShell)
+.venv\Scripts\Activate.ps1
+
+# Activate (Windows CMD)
+.venv\Scripts\activate.bat
+```
+
+#### Using standard venv
+
+```sh
+python -m venv .venv
+
+# bash/zsh
+source .venv/bin/activate
+
+# PowerShell
+.venv\Scripts\Activate.ps1
+
+# Windows CMD
+.venv\Scripts\activate.bat
+```
+
+#### Using conda
+
+```sh
+conda create -n seetapsych python=3.10
+conda activate seetapsych
+```
+
+### Install Dependencies
+
+Install the required dependencies:
+
+- seetapsych-lib
+- seetapsych-attributes
+- seetapsych-configs
+
+To run the WebUI, you need to install the `seetapsych-lib[webui]` package.
+
+#### Using uv (recommended)
 
 ```sh
 uv pip install 'seetapsych-lib[webui]' seetapsych-attributes seetapsych-configs
 ```
 
-### Using pip
-
-Install runtime dependencies:
+#### Using pip
 
 ```sh
-pip install seetapsych-lib seetapsych-attributes seetapsych-configs
-```
-
-If you want to run the WebUI, install extra tools manually:
-
-```sh
-pip install 'seetapsych-lib[webui]'
+pip install seetapsych-lib[webui] seetapsych-attributes seetapsych-configs
 ```
 
 ## Install Default Configs
@@ -50,7 +94,8 @@ When you use the WebUI or call the library programmatically later, `seetapsych-l
 
 ## Public Resources
 
-The default modules installed with `seetapsych-lib` are published and maintained at https://github.com/seetapsych/seetapsych-configs.
+The default modules installed with `seetapsych-lib` are published and maintained at <https://github.com/seetapsych/seetapsych-configs>.
+
 To update the built-in modules to their latest versions, upgrade the configs package and re-download:
 
 ```sh
@@ -59,7 +104,8 @@ seetapsych-manager download -f
 ```
 
 Algorithm inputs and execution outputs are defined via `Attributes`.
-The full Attributes specification is available at https://github.com/seetapsych/seetapsych-attributes.
+
+The full Attributes specification is available at <https://github.com/seetapsych/seetapsych-attributes>.
 
 ## Quick Start
 
@@ -68,7 +114,9 @@ The full Attributes specification is available at https://github.com/seetapsych/
 ```sh
 seetapsych-webui --log INFO
 ```
+
 or
+
 ```sh
 python -m seetapsych_lib.webui --log INFO
 ```
@@ -144,8 +192,9 @@ if __name__ == '__main__':
 
 The following environment variables are supported:
 
-| Env               | Description                                                                      |
-|:------------------|:---------------------------------------------------------------------------------|
-| SEETAPSYCH_LOG_LEVEL | Change default log level. Could be `WARNING`, `INFO`, `DEBUG`, or an integer (e.g., `10`). |
-| SEETAPSYCH_CACHE_DIR | Base directory for model cache. Models are cached under `<CACHE_DIR>/models`.     |
-| SEETAPSYCH_CONFIG_DIR | Base directory for config files. Config files are loaded from `<CONFIG_DIR>/configs`. |
+| Env                     | Description                                                                                |
+| :---------------------- | :----------------------------------------------------------------------------------------- |
+| SEETAPSYCH\_LOG\_LEVEL  | Change default log level. Could be `WARNING`, `INFO`, `DEBUG`, or an integer (e.g., `10`). |
+| SEETAPSYCH\_CACHE\_DIR  | Base directory for model cache. Models are cached under `<CACHE_DIR>/models`.              |
+| SEETAPSYCH\_CONFIG\_DIR | Base directory for config files. Config files are loaded from `<CONFIG_DIR>/configs`.      |
+
