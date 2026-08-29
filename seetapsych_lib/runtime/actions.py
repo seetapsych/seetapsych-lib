@@ -3,9 +3,12 @@
 import os
 import sys
 import copy
+import io
+import locale
 import shutil
 import importlib
 import subprocess
+import threading
 import ensurepip
 import urllib.parse
 from importlib.metadata import version, PackageNotFoundError
@@ -26,6 +29,24 @@ __all__ = [
     'call_entry',
     'load_package',
 ]
+
+
+def _get_locale_encoding() -> str:
+    try:
+        return locale.getencoding()
+    except AttributeError:
+        return locale.getpreferredencoding(False)
+
+
+def _decode_stderr(raw: bytes) -> str:
+    if raw is None:
+        return ""
+    for enc in (_get_locale_encoding(), "utf-8"):
+        try:
+            return raw.decode(encoding=enc, errors="replace")
+        except Exception:
+            continue
+    return ""
 
 
 def safe_which(
@@ -215,6 +236,19 @@ def _filter_applicable_requirements(requirements: list[str]) -> list[str]:
     return applicable
 
 
+def _tee_pipe(src: io.RawIOBase, dst: io.TextIOBase, buf: io.BytesIO):
+    dst_buf = dst.buffer
+    dst_flush = dst.flush
+    while True:
+        chunk = src.read(65536)
+        if not chunk:
+            break
+        dst_buf.write(chunk)
+        buf.write(chunk)
+        dst_flush()
+    src.close()
+
+
 def install_requirements(requirements: list[str], *, index_url: str = None, trusted_host: str | bool = None):
     if not requirements:
         return
@@ -239,20 +273,27 @@ def install_requirements(requirements: list[str], *, index_url: str = None, trus
     logger.info(f'Install requirements in subprocess:\n{" ".join(cmd)}')
 
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            stdout=None,    # print to current console
+            stdout=None,
             stderr=subprocess.PIPE,
-            text=True,
-            check=False
         )
 
-        if result.returncode != 0:
-            stderr = str(result.stderr)
-            sys.stderr.write(stderr + "\n\n")
-            sys.stderr.flush()
+        stderr_buf = io.BytesIO()
+        tee_thread = threading.Thread(
+            target=_tee_pipe,
+            args=(proc.stderr, sys.stderr, stderr_buf),
+            daemon=True
+        )
+        tee_thread.start()
 
-            msg = f'Failed to install requirements {requirements}:\n{stderr}'
+        returncode = proc.wait()
+        tee_thread.join()
+
+        if returncode != 0:
+            stderr_bytes = stderr_buf.getvalue()
+            stderr = _decode_stderr(stderr_bytes)
+            msg = f'Failed to install requirements {" ".join(requirements)} (exit code {returncode}):\n{stderr}'
             logger.error(msg)
             raise RuntimeError(msg)
     except FileNotFoundError:
@@ -260,7 +301,7 @@ def install_requirements(requirements: list[str], *, index_url: str = None, trus
         logger.error(msg)
         raise RuntimeError(msg)
     except Exception as e:
-        msg = f'Failed to execute uv pip or pip install {requirements}: {e}'
+        msg = f'Failed to execute uv pip or pip install {" ".join(requirements)}: {e}'
         logger.error(msg)
         raise RuntimeError(msg) from e
 

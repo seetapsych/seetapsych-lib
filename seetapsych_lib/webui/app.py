@@ -19,6 +19,7 @@ from seetapsych_lib.runtime.export import list2csv
 from seetapsych_lib import schema
 from seetapsych_lib.utils.logger import set_level as set_logger_level
 from seetapsych_lib.utils.markdown import schema2markdown
+from seetapsych_lib.utils.json import sanitize_json
 
 try:
     from seetapsych_attributes.schema import schema as attribute_schema
@@ -699,6 +700,7 @@ def run_image(runner: Runner, file: UploadedFile):
                 session_state.error = e
                 st.rerun()
 
+        report = sanitize_json(report)
         session_state.reports = [report]
     else:
         report = reports[0]
@@ -828,7 +830,7 @@ def run_video(runner: Runner, file: UploadedFile):
                         report = runner.run({
                             'default': image,
                         }, timestamp=capture.get(cv2.CAP_PROP_POS_MSEC) / 1000)
-                        reports.append(report)
+                        reports.append(sanitize_json(report))
                     except Exception as e:
                         session_state.error = e
                         st.rerun()
@@ -918,7 +920,7 @@ def process_image_file(runner: Runner, file: UploadedFile) -> dict[str, Any]:
     image = cv2.imdecode(numpy.frombuffer(image_bytes, numpy.uint8), cv2.IMREAD_COLOR)
     if image is None:
         raise RuntimeError(f'Invalid image: {file.name}')
-    return runner.run({'default': image})
+    return sanitize_json(runner.run({'default': image}))
 
 
 def page_run():
@@ -1095,7 +1097,7 @@ def page_run():
                                         i += 1
                                         timestamp = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
                                         report = runner.run({'default': image}, timestamp=timestamp)
-                                        video_reports.append(report)
+                                        video_reports.append(sanitize_json(report))
                                         ratio = (i / n) if n > 0 else 0.0
                                         progress.progress(ratio, text=f'[{i}/{n}]')
                             progress_slot.empty()
