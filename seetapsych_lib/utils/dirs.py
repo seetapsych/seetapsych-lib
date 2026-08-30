@@ -2,8 +2,7 @@
 
 from platformdirs import PlatformDirs
 
-
-appdirs = PlatformDirs(appname='SeetaPsych', appauthor='Levalup')
+appdirs = PlatformDirs(appname="SeetaPsych", appauthor="Levalup")
 
 
 def test():
@@ -11,5 +10,5 @@ def test():
     print(appdirs.user_data_dir)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test()

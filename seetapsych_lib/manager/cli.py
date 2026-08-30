@@ -2,23 +2,22 @@
 
 import argparse
 import glob
+import importlib
 import os
 import shutil
 import sys
 import tempfile
-import importlib
 from pathlib import Path
-from typing import cast, Protocol
+from typing import Any, Protocol, cast
 
 from seetapsych_lib import schema
-from seetapsych_lib.utils.logger import logger
+from seetapsych_lib.runtime.actions import install_module_requirements, install_requirements
+from seetapsych_lib.runtime.model import build_model, default_cache_dir
 from seetapsych_lib.runtime.module import default_config_dir
+from seetapsych_lib.utils.download_file import download_file
 from seetapsych_lib.utils.loader import load as load_config
 from seetapsych_lib.utils.loader import map_parser as _loader_map_parser
-from seetapsych_lib.runtime.actions import install_requirements, install_module_requirements
-from seetapsych_lib.runtime.model import build_model, default_cache_dir
-from seetapsych_lib.utils.download_file import download_file
-
+from seetapsych_lib.utils.logger import logger
 
 CONFIG_EXTENSIONS: list[str] = sorted(_loader_map_parser.keys())
 
@@ -37,7 +36,7 @@ def list_installed_configs() -> dict[schema.Uid, list[str]]:
 
     files: list[str] = []
     for ext in CONFIG_EXTENSIONS:
-        pattern = os.path.join('**', f'*.{ext}')
+        pattern = os.path.join("**", f"*.{ext}")
         ext_files = glob.glob(pattern, root_dir=config_root, recursive=True)
         files.extend([os.path.join(config_root, name) for name in ext_files])
 
@@ -48,7 +47,7 @@ def list_installed_configs() -> dict[schema.Uid, list[str]]:
             json_object = load_config(f)
             module = schema.module.parse(json_object)
         except Exception as e:
-            logger.warning(f'Skip unparsable installed config: {f}.\n[Exception]: {e}')
+            logger.warning(f"Skip unparsable installed config: {f}.\n[Exception]: {e}")
             continue
         uid = module.module.uid
         result.setdefault(uid, []).append(f)
@@ -57,15 +56,18 @@ def list_installed_configs() -> dict[schema.Uid, list[str]]:
 
 
 class InstallArgs(Protocol):
-    path: Path
+    @property
+    def path(self) -> Path: ...
 
 
 class UninstallArgs(Protocol):
-    path: Path
+    @property
+    def path(self) -> Path: ...
 
 
 class ShowArgs(Protocol):
-    detail: bool
+    @property
+    def detail(self) -> bool: ...
 
 
 class SetupArgs(Protocol):
@@ -77,7 +79,8 @@ class CacheArgs(Protocol):
 
 
 class DownloadArgs(Protocol):
-    force: bool
+    @property
+    def force(self) -> bool: ...
 
 
 def _iter_default_modules() -> list[tuple[schema.Module, list[str]]]:
@@ -94,7 +97,7 @@ def _iter_default_modules() -> list[tuple[schema.Module, list[str]]]:
 
     files: list[str] = []
     for ext in CONFIG_EXTENSIONS:
-        pattern = os.path.join('**', f'*.{ext}')
+        pattern = os.path.join("**", f"*.{ext}")
         ext_files = glob.glob(pattern, root_dir=config_root, recursive=True)
         files.extend([os.path.join(config_root, name) for name in ext_files])
     files = sorted(files)
@@ -104,7 +107,7 @@ def _iter_default_modules() -> list[tuple[schema.Module, list[str]]]:
             json_object = load_config(f)
             module = schema.module.parse(json_object)
         except Exception as e:
-            logger.warning(f'Skip unparsable config: {f}.\n[Exception]: {e}')
+            logger.warning(f"Skip unparsable config: {f}.\n[Exception]: {e}")
             continue
         uid = module.module.uid
         if uid in uid_seen:
@@ -116,19 +119,19 @@ def _iter_default_modules() -> list[tuple[schema.Module, list[str]]]:
     return entries
 
 
-def install_config(args: argparse.Namespace) -> None:
+def install_config(args: argparse.Namespace):
     param = cast(InstallArgs, cast(object, args))
     logger.info(f"Install config {param.path.name}")
 
     if not param.path.exists():
-        logger.error(f'Config not exists.')
+        logger.error("Config not exists.")
         exit(1)
 
     json_object = load_config(str(param.path.resolve()))
     try:
         module = schema.module.parse(json_object)
     except Exception as e:
-        logger.error(f'{e}')
+        logger.error(f"{e}")
         exit(2)
 
     uid = module.module.uid
@@ -136,16 +139,16 @@ def install_config(args: argparse.Namespace) -> None:
     uid_dir = os.path.join(config_root, uid)
     dest = os.path.join(uid_dir, param.path.name)
 
-    logger.info(f'Default config directory: {config_root}')
+    logger.info(f"Default config directory: {config_root}")
 
     existing = list_installed_configs().get(uid, [])
     if existing:
-        logger.info(f'Removing previous install of uid={uid} ({len(existing)} file(s))')
+        logger.info(f"Removing previous install of uid={uid} ({len(existing)} file(s))")
         for f in existing:
             try:
                 os.remove(f)
             except OSError as e:
-                logger.warning(f'Failed to remove old config {os.path.relpath(f, config_root)}: {e}')
+                logger.warning(f"Failed to remove old config {os.path.relpath(f, config_root)}: {e}")
         try:
             if os.path.isdir(uid_dir) and not os.listdir(uid_dir):
                 os.rmdir(uid_dir)
@@ -155,22 +158,22 @@ def install_config(args: argparse.Namespace) -> None:
     os.makedirs(uid_dir, exist_ok=True)
     shutil.copy2(param.path, dest)
 
-    logger.info(f'Installed config -> {os.path.relpath(dest, config_root)} (uid={uid})')
+    logger.info(f"Installed config -> {os.path.relpath(dest, config_root)} (uid={uid})")
 
 
-def uninstall_config(args: argparse.Namespace) -> None:
+def uninstall_config(args: argparse.Namespace):
     param = cast(UninstallArgs, cast(object, args))
     logger.info(f"Uninstall config {param.path.name}")
 
     if not param.path.exists():
-        logger.error(f'Config not exists.')
+        logger.error("Config not exists.")
         exit(1)
 
     json_object = load_config(str(param.path.resolve()))
     try:
         module = schema.module.parse(json_object)
     except Exception as e:
-        logger.error(f'{e}')
+        logger.error(f"{e}")
         exit(2)
 
     uid = module.module.uid
@@ -180,55 +183,56 @@ def uninstall_config(args: argparse.Namespace) -> None:
     files = installed.get(uid, [])
 
     if not files:
-        logger.error(f'No installed config found with uid={uid}')
+        logger.error(f"No installed config found with uid={uid}")
         exit(1)
 
-    logger.info(f'Uninstalling uid={uid} ({len(files)} file(s))')
+    logger.info(f"Uninstalling uid={uid} ({len(files)} file(s))")
     for f in files:
         try:
             os.remove(f)
-            logger.info(f'Removed {os.path.relpath(f, config_root)}')
+            logger.info(f"Removed {os.path.relpath(f, config_root)}")
         except OSError as e:
-            logger.warning(f'Failed to remove {os.path.relpath(f, config_root)}: {e}')
+            logger.warning(f"Failed to remove {os.path.relpath(f, config_root)}: {e}")
 
     uid_dir = os.path.join(config_root, uid)
     try:
         if os.path.isdir(uid_dir) and not os.listdir(uid_dir):
             os.rmdir(uid_dir)
-            logger.info(f'Removed empty uid directory: {os.path.relpath(uid_dir, config_root)}')
+            logger.info(f"Removed empty uid directory: {os.path.relpath(uid_dir, config_root)}")
     except OSError as e:
-        logger.warning(f'Failed to clean uid directory {os.path.relpath(uid_dir, config_root)}: {e}')
+        logger.warning(f"Failed to clean uid directory {os.path.relpath(uid_dir, config_root)}: {e}")
 
 
-def _ensure_seetapsych_configs() -> object:
+def _ensure_seetapsych_configs() -> Any:
     try:
-        return importlib.import_module('seetapsych_configs')
+        return importlib.import_module("seetapsych_configs")
     except ImportError:
         pass
 
-    logger.info('seetapsych_configs not found, attempting to install...')
+    logger.info("seetapsych_configs not found, attempting to install...")
     try:
-        install_requirements(['seetapsych-configs'])
+        install_requirements(["seetapsych-configs"])
     except Exception as e:
-        logger.error(f'Failed to install seetapsych_configs: {e}')
+        logger.error(f"Failed to install seetapsych_configs: {e}")
         sys.exit(1)
 
     try:
-        return importlib.import_module('seetapsych_configs')
+        return importlib.import_module("seetapsych_configs")
     except ImportError as e:
-        logger.error(f'Failed to import seetapsych_configs after install: {e}')
+        logger.error(f"Failed to import seetapsych_configs after install: {e}")
         sys.exit(1)
 
 
-def download_configs(args: argparse.Namespace) -> None:
+def download_configs(args: argparse.Namespace):
     param = cast(DownloadArgs, cast(object, args))
 
     configs_pkg = _ensure_seetapsych_configs()
     from seetapsych_configs import ConfigInfo
-    configs_list: list[ConfigInfo] = getattr(configs_pkg, 'configs', [])
+
+    configs_list: list[ConfigInfo] = getattr(configs_pkg, "configs", [])
 
     if not configs_list:
-        logger.warning('No configs found in seetapsych_configs.')
+        logger.warning("No configs found in seetapsych_configs.")
         return
 
     total = len(configs_list)
@@ -237,24 +241,24 @@ def download_configs(args: argparse.Namespace) -> None:
     failures: list[tuple[str, str]] = []
 
     config_root = default_config_dir()
-    logger.info(f'Download target directory: {config_root}')
+    logger.info(f"Download target directory: {config_root}")
 
     installed = list_installed_configs()
 
-    with tempfile.TemporaryDirectory(prefix='seetapsych_dl_') as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="seetapsych_dl_") as tmpdir:
         for config in configs_list:
             tag = f"{config['name']} v{config['version']}"
-            logger.info(f'Processing config: {tag}')
+            logger.info(f"Processing config: {tag}")
 
             try:
                 dl_path = download_file(
-                    url=config['download_url'],
+                    url=config["download_url"],
                     output=tmpdir,
                     overwrite=param.force,
                 )
             except Exception as e:
-                reason = f'{type(e).__name__}: {e}'
-                logger.error(f'Failed to download {tag}: {reason}')
+                reason = f"{type(e).__name__}: {e}"
+                logger.error(f"Failed to download {tag}: {reason}")
                 failures.append((tag, reason))
                 continue
 
@@ -262,15 +266,15 @@ def download_configs(args: argparse.Namespace) -> None:
                 json_object = load_config(dl_path)
                 module = schema.module.parse(json_object)
             except Exception as e:
-                reason = f'{type(e).__name__}: {e}'
-                logger.error(f'Downloaded config invalid for {tag}: {reason}')
+                reason = f"{type(e).__name__}: {e}"
+                logger.error(f"Downloaded config invalid for {tag}: {reason}")
                 failures.append((tag, reason))
                 continue
 
             uid = module.module.uid
 
             if uid in installed and not param.force:
-                logger.info(f'Already installed with uid={uid}. Skip (use --force to overwrite).')
+                logger.info(f"Already installed with uid={uid}. Skip (use --force to overwrite).")
                 skipped += 1
                 continue
 
@@ -279,12 +283,12 @@ def download_configs(args: argparse.Namespace) -> None:
 
             existing_same = installed.get(uid, [])
             if existing_same:
-                logger.info(f'Removing previous install of uid={uid} ({len(existing_same)} file(s))')
+                logger.info(f"Removing previous install of uid={uid} ({len(existing_same)} file(s))")
                 for f in existing_same:
                     try:
                         os.remove(f)
                     except OSError as e:
-                        logger.warning(f'Failed to remove old config {os.path.relpath(f, config_root)}: {e}')
+                        logger.warning(f"Failed to remove old config {os.path.relpath(f, config_root)}: {e}")
                 try:
                     if os.path.isdir(uid_dir) and not os.listdir(uid_dir):
                         os.rmdir(uid_dir)
@@ -294,27 +298,27 @@ def download_configs(args: argparse.Namespace) -> None:
             os.makedirs(uid_dir, exist_ok=True)
             shutil.copy2(dl_path, dest)
 
-            logger.info(f'Installed -> {os.path.relpath(dest, config_root)} (uid={uid})')
+            logger.info(f"Installed -> {os.path.relpath(dest, config_root)} (uid={uid})")
             installed[uid] = [dest]
             success += 1
 
     lines: list[str] = []
-    lines.append('')
-    lines.append('Download summary:')
-    lines.append(f'  Configs processed      : {total}')
-    lines.append(f'  Succeeded              : {success}')
-    lines.append(f'  Skipped (installed)    : {skipped}')
-    lines.append(f'  Failed                 : {len(failures)}')
+    lines.append("")
+    lines.append("Download summary:")
+    lines.append(f"  Configs processed      : {total}")
+    lines.append(f"  Succeeded              : {success}")
+    lines.append(f"  Skipped (installed)    : {skipped}")
+    lines.append(f"  Failed                 : {len(failures)}")
     if failures:
-        lines.append('  Failures:')
+        lines.append("  Failures:")
         for tag, reason in failures:
-            lines.append(f'    - {tag}')
-            lines.append(f'        reason: {reason}')
+            lines.append(f"    - {tag}")
+            lines.append(f"        reason: {reason}")
 
-    print('\n'.join(lines))
+    print("\n".join(lines))
 
 
-def show_configs(args: argparse.Namespace) -> None:
+def show_configs(args: argparse.Namespace):
     param = cast(ShowArgs, cast(object, args))
     detail = param.detail
 
@@ -328,7 +332,7 @@ def show_configs(args: argparse.Namespace) -> None:
     if os.path.isdir(config_root):
         files: list[str] = []
         for ext in CONFIG_EXTENSIONS:
-            pattern = os.path.join('**', f'*.{ext}')
+            pattern = os.path.join("**", f"*.{ext}")
             ext_files = glob.glob(pattern, root_dir=config_root, recursive=True)
             files.extend([os.path.join(config_root, name) for name in ext_files])
         files = sorted(files)
@@ -338,8 +342,8 @@ def show_configs(args: argparse.Namespace) -> None:
                 json_object = load_config(f)
                 module = schema.module.parse(json_object)
             except Exception as e:
-                lines.append(f'[!] Skip unparsable config: {os.path.relpath(f, config_root)}')
-                lines.append(f'    {e}')
+                lines.append(f"[!] Skip unparsable config: {os.path.relpath(f, config_root)}")
+                lines.append(f"    {e}")
                 continue
             uid = module.module.uid
             if uid in uid_seen:
@@ -348,73 +352,72 @@ def show_configs(args: argparse.Namespace) -> None:
                 uid_seen[uid] = len(entries)
                 entries.append((module, [f]))
 
-    lines.append(f'Installed modules ({len(entries)} total):')
+    lines.append(f"Installed modules ({len(entries)} total):")
     if not entries:
-        lines.append('  (none)')
+        lines.append("  (none)")
     else:
         for module, sources in entries:
             m = module.module
-            lines.append(f'  {m.name} v{m.version}')
-            lines.append(f'    uid         : {m.uid}')
+            lines.append(f"  {m.name} v{m.version}")
+            lines.append(f"    uid         : {m.uid}")
             if m.description:
-                lines.append(f'    description : {m.description}')
+                lines.append(f"    description : {m.description}")
             if m.keywords:
-                lines.append(f'    keywords    : {", ".join(m.keywords)}')
+                lines.append(f"    keywords    : {', '.join(m.keywords)}")
             if detail and m.requirements:
-                lines.append(f'    requirements: {", ".join(m.requirements)}')
-            lines.append(f'    source(s)   :')
+                lines.append(f"    requirements: {', '.join(m.requirements)}")
+            lines.append("    source(s)   :")
             for s in sources:
-                lines.append(f'      - {os.path.relpath(s, config_root)}')
+                lines.append(f"      - {os.path.relpath(s, config_root)}")
 
-            lines.append(f'    packages ({len(module.packages)}):')
+            lines.append(f"    packages ({len(module.packages)}):")
             if not module.packages:
-                lines.append('      (none)')
+                lines.append("      (none)")
             else:
                 for p in module.packages:
-                    lines.append(f'      - {p.name} v{p.version}')
-                    lines.append(f'          uid         : {p.uid}')
+                    lines.append(f"      - {p.name} v{p.version}")
+                    lines.append(f"          uid         : {p.uid}")
                     if p.description:
-                        lines.append(f'          description : {p.description}')
+                        lines.append(f"          description : {p.description}")
                     if p.keywords:
-                        lines.append(f'          keywords    : {", ".join(p.keywords)}')
-                    lines.append(f'          priority    : {p.priority}')
+                        lines.append(f"          keywords    : {', '.join(p.keywords)}")
+                    lines.append(f"          priority    : {p.priority}")
                     if p.provides:
-                        lines.append(f'          provides    : {", ".join(p.provides)}')
+                        lines.append(f"          provides    : {', '.join(p.provides)}")
                     if p.requires:
-                        lines.append(f'          requires    : {", ".join(p.requires)}')
+                        lines.append(f"          requires    : {', '.join(p.requires)}")
                     if detail and p.inputs:
-                        lines.append(f'          inputs      : {", ".join(p.inputs)}')
+                        lines.append(f"          inputs      : {', '.join(p.inputs)}")
                     if detail and p.usage_models:
-                        lines.append(f'          usage_models: {", ".join(p.usage_models)}')
+                        lines.append(f"          usage_models: {', '.join(p.usage_models)}")
                     if p.parameters:
-                        lines.append(f'          parameters ({len(p.parameters)}):')
-                        for param in p.parameters:
-                            default = ''
-                            if param.value is not None:
-                                default = f' = {param.value!r}'
-                            selection = ''
-                            if param.selection is not None:
-                                selection = f' [{", ".join(param.selection)}]'
-                            lines.append(
-                                f'            - {param.name} ({param.type.value}){default}{selection}')
+                        lines.append(f"          parameters ({len(p.parameters)}):")
+                        for p_param in p.parameters:
+                            default = ""
+                            if p_param.value is not None:
+                                default = f" = {p_param.value!r}"
+                            selection_val = ""
+                            if p_param.selection is not None:
+                                selection_val = f" [{', '.join(p_param.selection)}]"
+                            lines.append(f"            - {p_param.name} ({p_param.type.value}){default}{selection_val}")
                     if p.models:
-                        lines.append(f'          models ({len(p.models)}):')
+                        lines.append(f"          models ({len(p.models)}):")
                         for md in p.models:
-                            tag = ' [recommended]' if md.recommended else ''
-                            origin = ''
+                            tag = " [recommended]" if md.recommended else ""
+                            origin = ""
                             if detail:
                                 if md.cloud is not None:
-                                    origin = f' ({md.cloud.host}:{md.cloud.model_id})'
+                                    origin = f" ({md.cloud.host}:{md.cloud.model_id})"
                                 elif md.download is not None:
-                                    origin = f' (download: {md.download.url})'
+                                    origin = f" (download: {md.download.url})"
                                 elif md.entry is not None:
-                                    origin = f' (entry: {md.entry.method})'
-                            lines.append(f'            - {md.name} v{md.version}{tag}{origin}')
+                                    origin = f" (entry: {md.entry.method})"
+                            lines.append(f"            - {md.name} v{md.version}{tag}{origin}")
 
-    print('\n'.join(lines))
+    print("\n".join(lines))
 
 
-def setup_configs(args: argparse.Namespace) -> None:
+def setup_configs(args: argparse.Namespace):
     _ = cast(SetupArgs, cast(object, args))
 
     entries = _iter_default_modules()
@@ -423,52 +426,50 @@ def setup_configs(args: argparse.Namespace) -> None:
     skipped = 0
     failures: list[tuple[str, list[str], str]] = []
 
-    logger.info(f'Setting up dependencies for {total} installed module(s)...')
+    logger.info(f"Setting up dependencies for {total} installed module(s)...")
 
-    for module, sources in entries:
+    for module, _sources in entries:
         m = module.module
-        spec = m.requirements + [
-            f'{r.name}{r.require or ""} (git+{r.repo})' for r in m.refs
-        ]
-        display_name = f'{m.name} v{m.version} (uid={m.uid})'
-        logger.info(f'Installing dependencies for: {display_name}')
+        spec = m.requirements + [f"{r.name}{r.require or ''} (git+{r.repo})" for r in m.refs]
+        display_name = f"{m.name} v{m.version} (uid={m.uid})"
+        logger.info(f"Installing dependencies for: {display_name}")
 
         if not spec:
-            logger.info(f'No dependencies declared. Skip.')
+            logger.info("No dependencies declared. Skip.")
             skipped += 1
             continue
 
         try:
             install_module_requirements(m)
             success += 1
-            logger.info(f'Dependencies installed successfully.')
+            logger.info("Dependencies installed successfully.")
         except Exception as e:
-            reason = f'{type(e).__name__}: {e}'
-            logger.error(f'Failed to install dependencies for {display_name}: {reason}')
+            reason = f"{type(e).__name__}: {e}"
+            logger.error(f"Failed to install dependencies for {display_name}: {reason}")
             failures.append((display_name, spec, reason))
 
     lines: list[str] = []
-    lines.append('')
-    lines.append('Setup summary:')
-    lines.append(f'  Modules processed      : {total}')
-    lines.append(f'  Succeeded              : {success}')
-    lines.append(f'  Skipped (no deps)      : {skipped}')
-    lines.append(f'  Failed                 : {len(failures)}')
+    lines.append("")
+    lines.append("Setup summary:")
+    lines.append(f"  Modules processed      : {total}")
+    lines.append(f"  Succeeded              : {success}")
+    lines.append(f"  Skipped (no deps)      : {skipped}")
+    lines.append(f"  Failed                 : {len(failures)}")
     if failures:
-        lines.append('  Failures:')
+        lines.append("  Failures:")
         for display_name, spec, reason in failures:
-            lines.append(f'    - {display_name}')
-            lines.append(f'        requested: {", ".join(spec)}')
-            lines.append(f'        reason   : {reason}')
+            lines.append(f"    - {display_name}")
+            lines.append(f"        requested: {', '.join(spec)}")
+            lines.append(f"        reason   : {reason}")
 
-    print('\n'.join(lines))
+    print("\n".join(lines))
 
 
-def cache_models(args: argparse.Namespace) -> None:
+def cache_models(args: argparse.Namespace):
     _ = cast(CacheArgs, cast(object, args))
 
     cache_dir = default_cache_dir()
-    logger.info(f'Default model cache directory: {cache_dir}')
+    logger.info(f"Default model cache directory: {cache_dir}")
 
     entries = _iter_default_modules()
     total_models = 0
@@ -476,42 +477,42 @@ def cache_models(args: argparse.Namespace) -> None:
     success = 0
     failures: list[tuple[str, str, str]] = []
 
-    for module, sources in entries:
+    for module, _sources in entries:
         m = module.module
-        module_tag = f'{m.name} v{m.version} (uid={m.uid})'
+        module_tag = f"{m.name} v{m.version} (uid={m.uid})"
         for package in module.packages:
             for md in package.models:
                 total_models += 1
-                model_tag = f'[{module_tag}] {package.name}::{md.name} v{md.version} (uid={md.uid})'
-                logger.info(f'Processing model: {model_tag}')
+                model_tag = f"[{module_tag}] {package.name}::{md.name} v{md.version} (uid={md.uid})"
+                logger.info(f"Processing model: {model_tag}")
                 try:
                     usage_model = build_model(md, cache_dir=None)
                     if usage_model.exists():
-                        logger.info(f'Already cached. Skip.')
+                        logger.info("Already cached. Skip.")
                         already_cached += 1
                         continue
                     usage_model.cache()
-                    logger.info(f'Cached successfully.')
+                    logger.info("Cached successfully.")
                     success += 1
                 except Exception as e:
-                    reason = f'{type(e).__name__}: {e}'
-                    logger.error(f'Failed to cache model {model_tag}: {reason}')
+                    reason = f"{type(e).__name__}: {e}"
+                    logger.error(f"Failed to cache model {model_tag}: {reason}")
                     failures.append((model_tag, str(md.uid), reason))
 
     lines: list[str] = []
-    lines.append('')
-    lines.append('Cache summary:')
-    lines.append(f'  Models processed       : {total_models}')
-    lines.append(f'  Newly cached           : {success}')
-    lines.append(f'  Already cached (skip)  : {already_cached}')
-    lines.append(f'  Failed                 : {len(failures)}')
+    lines.append("")
+    lines.append("Cache summary:")
+    lines.append(f"  Models processed       : {total_models}")
+    lines.append(f"  Newly cached           : {success}")
+    lines.append(f"  Already cached (skip)  : {already_cached}")
+    lines.append(f"  Failed                 : {len(failures)}")
     if failures:
-        lines.append('  Failures:')
+        lines.append("  Failures:")
         for model_tag, uid, reason in failures:
-            lines.append(f'    - uid={uid} {model_tag}')
-            lines.append(f'        reason: {reason}')
+            lines.append(f"    - uid={uid} {model_tag}")
+            lines.append(f"        reason: {reason}")
 
-    print('\n'.join(lines))
+    print("\n".join(lines))
 
 
 def main():
@@ -553,7 +554,8 @@ def main():
     )
     download_parser.set_defaults(func=download_configs)
     download_parser.add_argument(
-        "-f", "--force",
+        "-f",
+        "--force",
         action="store_true",
         help="Force re-download and overwrite existing installed configs",
     )
@@ -564,7 +566,8 @@ def main():
     )
     show_parser.set_defaults(func=show_configs)
     show_parser.add_argument(
-        "-d", "--detail",
+        "-d",
+        "--detail",
         action="store_true",
         help="Show full details including requirements, model origins and internal fields",
     )
@@ -585,5 +588,5 @@ def main():
     args.func(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

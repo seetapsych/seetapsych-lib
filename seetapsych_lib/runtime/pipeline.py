@@ -6,45 +6,40 @@ from typing import Any, Iterable, Literal
 from pydantic import BaseModel, Field
 
 from seetapsych_lib import schema
+from seetapsych_lib.runtime.actions import (
+    import_entry,
+    install_module_requirements,
+    unsatisfied_requirements,
+)
 from seetapsych_lib.runtime.factory import Factory
 from seetapsych_lib.runtime.model import build_model, exists_model
-from seetapsych_lib.utils.pencilbox import unique_list
-from seetapsych_lib.runtime.actions import unsatisfied_requirements, install_module_requirements, import_entry
 from seetapsych_lib.utils.logger import logger
+from seetapsych_lib.utils.pencilbox import unique_list
 
 __all__ = [
-    'Pipeline',
-    'PipelineConfig',
-    'InvalidConfig',
-    'ProblemConfig',
-    'SolvedConfig',
-    'UnsatisfactionConfig',
+    "Pipeline",
+    "PipelineConfig",
+    "InvalidConfig",
+    "ProblemConfig",
+    "SolvedConfig",
+    "UnsatisfactionConfig",
 ]
 
+
 class PipelineConfig(BaseModel):
-    name: str = Field(
-        '',
-        description='Pipeline name')
-    description: str = Field(
-        '',
-        description='Pipeline description')
+    name: str = Field("", description="Pipeline name")
+    description: str = Field("", description="Pipeline description")
 
     modules: list[schema.ModuleSpec] = Field(
-        [],
-        description='The the current package modules, which should be satisfied')
-    packages: list[schema.Package] = Field(
-        [],
-        description='The executing packages')
-    attributes: list[str] = Field(
-        [],
-        description='The focused attributes')
+        [], description="The the current package modules, which should be satisfied"
+    )
+    packages: list[schema.Package] = Field([], description="The executing packages")
+    attributes: list[str] = Field([], description="The focused attributes")
 
     parameters: dict[schema.Uid, list[schema.Parameter]] = Field(
-        {},
-        description='Parameters setting based on `package.uid`')
-    models: dict[schema.Uid, list[schema.Model]] = Field(
-        {},
-        description='Models setting based on `package.uid`')
+        {}, description="Parameters setting based on `package.uid`"
+    )
+    models: dict[schema.Uid, list[schema.Model]] = Field({}, description="Models setting based on `package.uid`")
 
 
 class InvalidConfig(BaseModel):
@@ -54,19 +49,16 @@ class InvalidConfig(BaseModel):
     attributes: list[str] = Field([])
     parameters: dict[schema.Uid, list[schema.Parameter]] = Field({})
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.modules or self.packages or self.models or self.attributes or self.parameters)
 
 
 class ProblemConfig(BaseModel):
-    missing_module_packages: list[schema.Package] = Field(
-        [], description='no module contains those packages')
-    missing_model_packages: list[schema.Package] = Field(
-        [], description='missing model in usage_models')
-    attributes: list[str] = Field(
-        [], description='attributes required but not provided in packages')
+    missing_module_packages: list[schema.Package] = Field([], description="no module contains those packages")
+    missing_model_packages: list[schema.Package] = Field([], description="missing model in usage_models")
+    attributes: list[str] = Field([], description="attributes required but not provided in packages")
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.missing_module_packages or self.missing_model_packages or self.attributes)
 
 
@@ -78,26 +70,21 @@ class SolvedConfig(BaseModel):
 
     unsolved: ProblemConfig | None = Field(None)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.add_modules or self.add_packages or self.add_attributes or self.add_models or self.unsolved)
 
 
 class UnsatisfactionConfig(BaseModel):
-    modules: list[schema.ModuleSpec] = Field(
-        [], description='module requirement has not satisfied')
-    entries: list[schema.Entry] = Field(
-        [], description='package/model entry is not callable')
-    models: list[schema.Model] = Field(
-        [], description='model did not exists in cache')
-    imports: list[list[str]] = Field(
-        [], description='missing python package while checking config'
-    )
+    modules: list[schema.ModuleSpec] = Field([], description="module requirement has not satisfied")
+    entries: list[schema.Entry] = Field([], description="package/model entry is not callable")
+    models: list[schema.Model] = Field([], description="model did not exists in cache")
+    imports: list[list[str]] = Field([], description="missing python package while checking config")
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.modules or self.entries or self.models)
 
 
-InstallBackend = Literal['pip']
+InstallBackend = Literal["pip"]
 
 
 class FactoryRequired(Exception):
@@ -120,17 +107,19 @@ class AttributeNotProvided(Exception):
     pass
 
 
-class Pipeline(object):
-    def __init__(self,
-                 factory: Factory = None,
-                 *,
-                 config: PipelineConfig = None,
-                 name: str = None,
-                 description: str = None,
-                 packages: list[schema.Uid] = None,
-                 attributes: list[str] = None,
-                 models: dict[schema.Uid, list[schema.Uid]] = None,
-                 parameters: dict[schema.Uid, dict[str, Any]] = None):
+class Pipeline:
+    def __init__(
+        self,
+        factory: Factory | None = None,
+        *,
+        config: PipelineConfig | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        packages: list[schema.Uid] | None = None,
+        attributes: list[str] | None = None,
+        models: dict[schema.Uid, list[schema.Uid]] | None = None,
+        parameters: dict[schema.Uid, dict[str, Any]] | None = None,
+    ):
         """
         To initialize a pipeline, you can either directly provide a config.
         Or supply the required packages or attributes,
@@ -243,6 +232,7 @@ class Pipeline(object):
         if next((m for m in package_models if m.uid == model.uid), None) is None:
             package_models.append(model.model_copy(deep=True))
             return True
+        return False
 
     def _remove_model(self, package_uid: str, model_uid: str) -> bool:
         if package_uid not in self.__config.models:
@@ -266,7 +256,8 @@ class Pipeline(object):
             return
 
         parameter_index: int | None = next(
-            (i for i, p in enumerate(pacakge_parameters) if p.name == parameter.name), None)
+            (i for i, p in enumerate(pacakge_parameters) if p.name == parameter.name), None
+        )
         if parameter_index is None:
             pacakge_parameters.append(parameter.model_copy(deep=True))
             return
@@ -290,13 +281,18 @@ class Pipeline(object):
                 raise PackageNotFound(package_uid)
             # append package
             if self._add_package(factory_package):
-                logger.debug(f'Add package {package_uid}')
+                logger.debug(f"Add package {package_uid}")
                 # append module
                 if factory_module := self.__factory.query_module_of_package(package_uid):
                     if self._add_module(factory_module.module):
-                        logger.debug(f'Add module {factory_module.module.uid}')
+                        logger.debug(f"Add module {factory_module.module.uid}")
 
-    def get_package(self, uid: schema.Uid = None, name: str = None, provide: str = None) -> schema.Package | None:
+    def get_package(
+        self,
+        uid: schema.Uid | None = None,
+        name: str | None = None,
+        provide: str | None = None,
+    ) -> schema.Package | None:
         """
         Query the first matching package in the current configuration by uid, name, or provide.
         Priority: uid > name > provide.
@@ -325,7 +321,7 @@ class Pipeline(object):
                 raise AttributeNotProvided(attr_name)
             # append attributes
             self.__config.attributes.append(attr_name)
-            logger.debug(f'Add attribute {attr_name}')
+            logger.debug(f"Add attribute {attr_name}")
 
     def add_model(self, package_uid: schema.Uid, model_uid: schema.Uid):
         if self.__factory is None:
@@ -336,7 +332,7 @@ class Pipeline(object):
             raise ModelNotFound(model_uid)
 
         if self._add_model(package_uid, model):
-            logger.debug(f'Add model {package_uid} {model_uid}')
+            logger.debug(f"Add model {package_uid} {model_uid}")
 
     def set_models(self, package_uid: schema.Uid, model_uids: Iterable[schema.Uid]):
         if self.__factory is None:
@@ -357,14 +353,14 @@ class Pipeline(object):
         self.__config.models.clear()
         for model in found_models:
             if self._add_model(package_uid, model):
-                logger.debug(f'Set model {package_uid} {model.uid}')
+                logger.debug(f"Set model {package_uid} {model.uid}")
 
     def remove_model(self, package_uid: schema.Uid, model_uid: schema.Uid):
         if self.__factory is None:
             raise FactoryRequired
 
         if self._remove_model(package_uid, model_uid):
-            logger.debug(f'Remove model {package_uid} {model_uid}')
+            logger.debug(f"Remove model {package_uid} {model_uid}")
 
     def set_parameters(self, package_uid: schema.Uid, values: dict[str, Any]):
         if self.__factory is None:
@@ -373,18 +369,19 @@ class Pipeline(object):
         for name, value in values.items():
             factory_parameter = self.__factory.query_parameter(package_uid, name)
             if factory_parameter is None:
-                parameter = schema.Parameter(name=name, value=value, **{})
+                sp_kwargs: dict[str, Any] = {"name": name, "value": value}
+                parameter = schema.Parameter(**sp_kwargs)
             else:
-                parameter = factory_parameter.model_copy(deep=True, update={'value': value})
+                parameter = factory_parameter.model_copy(deep=True, update={"value": value})
             self._set_parameter(package_uid, parameter)
-            logger.debug(f'Set parameter {package_uid} {name}={value}')
+            logger.debug(f"Set parameter {package_uid} {name}={value}")
 
     def reset_parameters(self, package_uid: schema.Uid, values: dict[str, Any]):
         self.clear_parameters(package_uid)
         self.set_parameters(package_uid, values)
 
     def clear_parameters(self, package_uid: schema.Uid):
-        logger.debug(f'Clear parameters of package ({package_uid})')
+        logger.debug(f"Clear parameters of package ({package_uid})")
         if package_uid in self.__config.parameters:
             del self.__config.parameters[package_uid]
 
@@ -393,7 +390,8 @@ class Pipeline(object):
         """
         Current working pipeline.
         You can persist this object to a file and reconstruct it.
-        However, do not directly modify the return value here unless you are fully aware of what you are doing.
+        However, do not directly modify the return value here
+        unless you are fully aware of what you are doing.
         :return: Current working pipeline.
         """
         return self.__config
@@ -426,7 +424,7 @@ class Pipeline(object):
 
         inputs = unique_list(inputs)
 
-        return ['default'] if not inputs else inputs
+        return ["default"] if not inputs else inputs
 
     def requirements(self) -> list[str]:
         """
@@ -472,7 +470,7 @@ class Pipeline(object):
         for i, m in enumerate(modules):
             fm = self.__factory.query_module(m.uid)
             if fm is None:
-                logger.warning(f'Found invalid module [{m.name}]({m.uid})')
+                logger.warning(f"Found invalid module [{m.name}]({m.uid})")
                 invalid_modules.append(m)
                 continue
             if update:
@@ -484,7 +482,7 @@ class Pipeline(object):
         for i, p in enumerate(packages):
             fp = self.__factory.query_package(p.uid)
             if fp is None:
-                logger.warning(f'Found invalid package [{p.name}]({p.uid})')
+                logger.warning(f"Found invalid package [{p.name}]({p.uid})")
                 invalid_packages.append(p)
                 continue
             if update:
@@ -496,15 +494,16 @@ class Pipeline(object):
         for package_uid, models in package_models.items():
             package = self.__factory.query_package(package_uid)
             if package is None:
-                logger.warning(f'Found non exists package ({package_uid}) in models config')
+                logger.warning(f"Found non exists package ({package_uid}) in models config")
                 invalid_models[package_uid] = models
                 continue
             for i, model in enumerate(models):
                 factory_model = self.__factory.query_model(model.uid)
                 factory_package = self.__factory.query_package_of_model(model.uid)
                 if factory_model is None or package.uid != factory_package:
-                    logger.warning(f'Found package [{package.name}]({package.uid})'
-                                   f' invalid model [{model.name}]({model.uid})')
+                    logger.warning(
+                        f"Found package [{package.name}]({package.uid}) invalid model [{model.name}]({model.uid})"
+                    )
                     invalid_models[package_uid].append(model)
                     continue
                 if update:
@@ -515,7 +514,7 @@ class Pipeline(object):
         factory_attributes = set(self.__factory.attributes)
         for attr in self.__config.attributes:
             if attr not in factory_attributes:
-                logger.warning(f'Found invalid attribute {attr}')
+                logger.warning(f"Found invalid attribute {attr}")
                 invalid_attributes.append(attr)
 
         # check parameters
@@ -524,18 +523,20 @@ class Pipeline(object):
         for package_uid, parameters in package_parameters.items():
             factory_package = self.__factory.query_package(package_uid)
             if factory_package is None:
-                logger.warning(f'Found non exists package ({package_uid}) in parameters config')
+                logger.warning(f"Found non exists package ({package_uid}) in parameters config")
                 invalid_parameters[package_uid] = parameters
                 continue
             for i, param in enumerate(parameters):
                 factory_param = self.__factory.query_parameter(package_uid, param.name)
                 if factory_param is None:
-                    logger.warning(f'Found package [{factory_package.name}]({factory_package.uid})'
-                                   f' invalid parameter {param.name}={param.value}')
+                    logger.warning(
+                        f"Found package [{factory_package.name}]({factory_package.uid})"
+                        f" invalid parameter {param.name}={param.value}"
+                    )
                     invalid_parameters[package_uid].append(param)
                     continue
                 if update:
-                    parameters[i] = factory_param.model_copy(deep=True, update={'value': param.value})
+                    parameters[i] = factory_param.model_copy(deep=True, update={"value": param.value})
 
         invalid = invalid_modules or invalid_packages or invalid_models or invalid_attributes or invalid_parameters
 
@@ -584,7 +585,7 @@ class Pipeline(object):
         missing_module_packages: list[schema.Package] = []
         for package in packages:
             if package.uid not in module_packages_uids:
-                logger.debug(f'Found missing module package [{package.name}]({package.uid})')
+                logger.debug(f"Found missing module package [{package.name}]({package.uid})")
                 missing_module_packages.append(package.model_copy(deep=True))
 
         # check models
@@ -596,7 +597,7 @@ class Pipeline(object):
 
             if not config_models:
                 if package.models:
-                    problem_models.extend(usage_models if usage_models else ['*'])
+                    problem_models.extend(usage_models if usage_models else ["*"])
             else:
                 config_model_usages = set([m.usage for m in config_models])
                 for usage in usage_models:
@@ -604,13 +605,13 @@ class Pipeline(object):
                         problem_models.append(usage)
 
             if problem_models:
-                log_models = ', '.join(problem_models)
-                logger.debug(f'Found package [{package.name}]({package.uid}) mising models: {log_models}')
-                missing_model_packages.append(package.model_copy(deep=True, update={'usage_models': problem_models}))
+                log_models = ", ".join(problem_models)
+                logger.debug(f"Found package [{package.name}]({package.uid}) mising models: {log_models}")
+                missing_model_packages.append(package.model_copy(deep=True, update={"usage_models": problem_models}))
 
         if problem_attributes:
-            log_attributes = ', '.join(problem_attributes)
-            logger.debug(f'Found not provided attributes {log_attributes}')
+            log_attributes = ", ".join(problem_attributes)
+            logger.debug(f"Found not provided attributes {log_attributes}")
 
         has_problem = missing_module_packages or missing_model_packages or problem_attributes
 
@@ -658,8 +659,7 @@ class Pipeline(object):
                 # select provider
                 provider = max(providers, key=lambda x: (x.priority, x.format_version))
                 if self._add_package(provider):
-                    logger.info(f'Solve required package [{provider.name}]({provider.uid})'
-                                f' for attribute {attr}')
+                    logger.info(f"Solve required package [{provider.name}]({provider.uid}) for attribute {attr}")
                     solved.add_packages.append(provider.model_copy(deep=True))
                     package_added = True
 
@@ -671,8 +671,10 @@ class Pipeline(object):
                 if factory_module is not None:
                     if self._add_module(factory_module.module):
                         module_spec = factory_module.module
-                        logger.info(f'Solve required module [{module_spec.name}]({module_spec.uid}) '
-                                    f'for package [{provider.name}]({provider.uid})')
+                        logger.info(
+                            f"Solve required module [{module_spec.name}]({module_spec.uid}) "
+                            f"for package [{provider.name}]({provider.uid})"
+                        )
                         solved.add_modules.append(factory_module.module.model_copy(deep=True))
 
             if package_added:
@@ -685,7 +687,6 @@ class Pipeline(object):
             solved.unsolved = unsolved if unsolved else None
             return solved if solved else None
 
-
         # solve modules
         for package in problem.missing_module_packages:
             factory_module = self.__factory.query_module_of_package(package.uid)
@@ -695,8 +696,10 @@ class Pipeline(object):
             # add module
             if self._add_module(factory_module.module):
                 module_spec = factory_module.module
-                logger.info(f'Solve required module [{module_spec.name}]({module_spec.uid})'
-                            f' for package [{package.name}]({package.uid})')
+                logger.info(
+                    f"Solve required module [{module_spec.name}]({module_spec.uid})"
+                    f" for package [{package.name}]({package.uid})"
+                )
                 solved.add_modules.append(factory_module.module.model_copy(deep=True))
 
         # ignore models
@@ -726,9 +729,8 @@ class Pipeline(object):
             still_missing_model_usages: list[str] = []
             prepare_models: list[schema.Model] = []
             for model_usage in package.usage_models:
-                if model_usage == '*':
-                    selected_model = package_recommended_models[0] \
-                        if package_recommended_models else package_models[0]
+                if model_usage == "*":
+                    selected_model = package_recommended_models[0] if package_recommended_models else package_models[0]
                     prepare_models.append(selected_model)
                     continue
 
@@ -738,33 +740,35 @@ class Pipeline(object):
                     still_missing_model_usages.append(model_usage)
                     continue
 
-                selected_model = current_recommended_models[0] \
-                    if current_recommended_models else current_models[0]
+                selected_model = current_recommended_models[0] if current_recommended_models else current_models[0]
                 prepare_models.append(selected_model)
 
             if still_missing_model_usages:
-                unsolved.missing_model_packages.append(package.model_copy(
-                    deep=True,
-                    update={'usage_models': still_missing_model_usages}))
+                unsolved.missing_model_packages.append(
+                    package.model_copy(deep=True, update={"usage_models": still_missing_model_usages})
+                )
 
             for model in prepare_models:
                 if self._add_model(package_uid=package.uid, model=model):
-                    logger.info(f'Solve package [{package.name}]({package.uid})'
-                                f' required model [{model.name}]({model.uid})')
+                    logger.info(
+                        f"Solve package [{package.name}]({package.uid}) required model [{model.name}]({model.uid})"
+                    )
                     solved.add_models.append(model.model_copy(deep=True))
 
         if unsolved:
-            logger.warning(f'Pipeline still has unsolved problem: {unsolved}')
+            logger.warning(f"Pipeline still has unsolved problem: {unsolved}")
 
         # return solve report
         solved.unsolved = unsolved if unsolved else None
         return solved if solved else None
 
-    def satisfied(self, *, cache_dir: str = None) -> tuple[bool, UnsatisfactionConfig | None]:
+    def satisfied(self, *, cache_dir: str | None = None) -> tuple[bool, UnsatisfactionConfig | None]:
         """
-        To check whether the current pipeline is ready to start running, the following conditions will be checked:
+        Check whether the current pipeline is ready to start running.
+        The following conditions will be checked:
             1. Whether the requirements of all modules have been met.
-            2. Whether the entries of packages and models can be imported and the calling functions can be obtained.
+            2. Whether the entries of packages and models can be imported
+               and the calling functions can be obtained.
         :return:
         """
         un_imports: list[list[str]] = []
@@ -773,9 +777,9 @@ class Pipeline(object):
             un_requirements = unsatisfied_requirements(module)
             if not un_requirements:
                 continue
-            log_requirements = ' '.join(un_requirements)
-            logger.debug(f'Unsatisfied module [{module.name}]({module.uid}) requirements: {log_requirements}')
-            un_modules.append(module.model_copy(deep=True, update={'requirements': un_requirements}))
+            log_requirements = " ".join(un_requirements)
+            logger.debug(f"Unsatisfied module [{module.name}]({module.uid}) requirements: {log_requirements}")
+            un_modules.append(module.model_copy(deep=True, update={"requirements": un_requirements}))
 
         un_entries: list[schema.Entry] = []
         for package in self.__config.packages:
@@ -783,14 +787,15 @@ class Pipeline(object):
             if package_entry is None:
                 entry_method = package.entry.method
                 if package.entry.package:
-                    entry_method = '.'.join([package.entry.package, entry_method])
+                    entry_method = ".".join([package.entry.package, entry_method])
 
                 if pname:
-                    logger.debug(f'Can not import package entry "{entry_method}"'
-                                 f', because it has failed to import "{pname}"')
+                    logger.debug(
+                        f'Can not import package entry "{entry_method}", because it has failed to import "{pname}"'
+                    )
                     un_imports.append([entry_method, pname])
 
-                logger.debug(f'Unsatisfied package entry method {entry_method}')
+                logger.debug(f"Unsatisfied package entry method {entry_method}")
                 un_entries.append(package.entry)
 
         un_models: list[schema.Model] = []
@@ -802,19 +807,21 @@ class Pipeline(object):
                     if model_entry is None:
                         entry_method = model.entry.method
                         if model.entry.package:
-                            entry_method = '.'.join([model.entry.package, entry_method])
+                            entry_method = ".".join([model.entry.package, entry_method])
 
                         if pname:
-                            logger.debug(f'Can not import model entry "{entry_method}"'
-                                         f', because it has failed to import "{pname}"')
+                            logger.debug(
+                                f'Can not import model entry "{entry_method}"'
+                                f', because it has failed to import "{pname}"'
+                            )
                             un_imports.append([entry_method, pname])
 
-                        logger.debug(f'Unsatisfied model entry method {entry_method}')
+                        logger.debug(f"Unsatisfied model entry method {entry_method}")
                         un_entries.append(model.entry)
                         continue
                 # check model exists
                 if not exists_model(model, cache_dir=cache_dir):
-                    logger.debug(f'Unsatisfied uncached model [{model.name}]({model.uid})')
+                    logger.debug(f"Unsatisfied uncached model [{model.name}]({model.uid})")
                     un_models.append(model)
 
         unsatisfied = un_modules or un_entries or un_models or un_imports
@@ -822,25 +829,20 @@ class Pipeline(object):
         if not unsatisfied:
             return True, None
 
-        return False, UnsatisfactionConfig(
-            modules=un_modules,
-            entries=un_entries,
-            models=un_models,
-            imports=un_imports
-        )
+        return False, UnsatisfactionConfig(modules=un_modules, entries=un_entries, models=un_models, imports=un_imports)
 
-    def install_requirements(self, *, backend: InstallBackend = 'pip'):
+    def install_requirements(self, *, backend: InstallBackend = "pip"):
         """
         Install all unsatisfied requirements
         :param backend: This parameter is retained but currently has no effect.
         :return:
         """
         for module in self.__config.modules:
-            log_requirements = ' '.join(module.requirements)
-            logger.info(f'Install requirements of module [{module.name}]({module.uid}): {log_requirements}')
+            log_requirements = " ".join(module.requirements)
+            logger.info(f"Install requirements of module [{module.name}]({module.uid}): {log_requirements}")
             install_module_requirements(module)
 
-    def cache_models(self, *, cache_dir: str = None):
+    def cache_models(self, *, cache_dir: str | None = None):
         """
         Cache all selected models
         :param cache_dir:
@@ -848,8 +850,9 @@ class Pipeline(object):
         """
         for models in self.__config.models.values():
             for model_config in models:
-                logger.info(f'Cache model [{model_config.name}]({model_config.uid})')
-                # Exceptions may be thrown by build model and cache, which are not handled in the current version
+                logger.info(f"Cache model [{model_config.name}]({model_config.uid})")
+                # Exceptions may be thrown by build model and cache,
+                # which are not handled in the current version
                 model = build_model(model_config, cache_dir=cache_dir)
                 model.cache()
 
@@ -858,5 +861,5 @@ def test():
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test()

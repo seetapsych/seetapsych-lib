@@ -147,6 +147,7 @@ from seetapsych_lib.runtime.pipeline import Pipeline
 from seetapsych_lib.runtime.runner import Runner
 from seetapsych_lib.runtime.parallel_runner import ParallelRunner
 
+
 def main():
     # All installed algorithm modules are loaded by default during initialization
     # You can use the `load_xxx_module(s)` methods to load specific algorithm modules
@@ -155,7 +156,7 @@ def main():
     # Quickly build a workflow and declare the attribute to compute as the face feature 'face/detection'
     # You can view all available attributes of installed algorithms using the `seetapsych-manager show` command
     # Result fields for attributes can be found at https://github.com/seetapsych/seetapsych-attributes
-    pipeline = Pipeline(factory, attributes=['face/detection'])
+    pipeline = Pipeline(factory, attributes=["face/detection"])
 
     # Check for dependencies or missing issues that need to be resolved with solve()
     print(pipeline.problem())
@@ -175,14 +176,13 @@ def main():
     # runner = ParallelRunner(pipeline)
 
     # Run the algorithm
-    report = runner.run(data={
-        'default': cv2.imread('image.jpg')
-    })
+    report = runner.run(data={"default": cv2.imread("image.jpg")})
 
     # Print the execution results
     print(json.dumps(report, indent=2, ensure_ascii=False))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
 ```
 

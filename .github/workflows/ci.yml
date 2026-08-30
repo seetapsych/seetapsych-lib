@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - workflows
+      - "workflows/**"
+    tags-ignore: ["r*"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & Type & Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive package directory
+        id: pkg
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          PACKAGE_DIR="${REPO_NAME//-/_}"
+          echo "PACKAGE_DIR=$PACKAGE_DIR" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        env:
+          UV_TORCH_BACKEND: auto
+        run: uv sync --group dev
+
+      - name: Run all lint/type/security checks (collect all failures)
+        env:
+          PACKAGE_DIR: ${{ steps.pkg.outputs.PACKAGE_DIR }}
+        run: |
+          set +e
+          EXIT_CODE=0
+
+          echo "=== ruff check ==="
+          uv run ruff check .
+          EC=$?; [ $EC -ne 0 ] && EXIT_CODE=$EC
+
+          echo ""
+          echo "=== ruff format --check ==="
+          uv run ruff format --check .
+          EC=$?; [ $EC -ne 0 ] && EXIT_CODE=$EC
+
+          echo ""
+          echo "=== mypy ==="
+          uv run mypy "$PACKAGE_DIR"
+          EC=$?; [ $EC -ne 0 ] && EXIT_CODE=$EC
+
+          echo ""
+          echo "=== bandit ==="
+          uv run bandit -r "$PACKAGE_DIR" -c pyproject.toml
+          EC=$?; [ $EC -ne 0 ] && EXIT_CODE=$EC
+
+          exit $EXIT_CODE
+        shell: bash
+
+  test:
+    name: Test (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        env:
+          UV_TORCH_BACKEND: auto
+        run: uv sync --group dev
+
+      - name: Run pytest
+        run: uv run pytest
+
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Verify built artifacts
+        run: twine check dist/*
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+          if-no-files-found: error

@@ -1,39 +1,40 @@
 # -*- coding: utf-8 -*-
 
-import os
-import sys
 import copy
+import ensurepip
+import importlib
 import io
 import locale
+import os
 import shutil
-import importlib
 import subprocess
+import sys
 import threading
-import ensurepip
 import urllib.parse
-from importlib.metadata import version, PackageNotFoundError
-from typing import Any, Callable, Union
+from importlib.metadata import PackageNotFoundError, version
+from typing import IO, Any, Callable, cast
 
 from packaging.requirements import Requirement
 
-from seetapsych_lib import api
-from seetapsych_lib import schema
+from seetapsych_lib import api, schema
 from seetapsych_lib.utils.logger import logger
 
-
 __all__ = [
-    'unsatisfied_requirements',
-    'install_requirements',
-    'install_module_requirements',
-    'import_entry',
-    'call_entry',
-    'load_package',
+    "unsatisfied_requirements",
+    "install_requirements",
+    "install_module_requirements",
+    "import_entry",
+    "call_entry",
+    "load_package",
 ]
 
 
 def _get_locale_encoding() -> str:
     try:
-        return locale.getencoding()
+        enc = getattr(locale, "getencoding", None)
+        if enc is not None:
+            return cast(Callable[[], str], enc)()
+        return locale.getpreferredencoding(False)
     except AttributeError:
         return locale.getpreferredencoding(False)
 
@@ -49,10 +50,7 @@ def _decode_stderr(raw: bytes) -> str:
     return ""
 
 
-def safe_which(
-        cmd: Union[str, os.PathLike],
-        path: Union[str, os.PathLike] = None
-) -> str | None:
+def safe_which(cmd: str | os.PathLike[Any], path: str | os.PathLike[Any] | None = None) -> str | None:
     """
     Safely wrap shutil.which to support both str and PathLike inputs.
 
@@ -108,12 +106,7 @@ def get_uv_version(uv_path: str) -> str | None:
         Version string if successful, otherwise None.
     """
     try:
-        result = subprocess.run(
-            [uv_path, "--version"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = subprocess.run([uv_path, "--version"], capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except Exception:
         return None
@@ -127,12 +120,7 @@ def get_pip_version() -> str | None:
         Version string if successful, otherwise None.
     """
     try:
-        result = subprocess.run(
-            [sys.executable, '-m', 'pip', "--version"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except Exception:
         return None
@@ -144,7 +132,7 @@ def _marker_applies(req: Requirement) -> bool:
     try:
         return req.marker.evaluate()
     except Exception as e:
-        msg = f'Unable to evaluate marker for {req}: {e}'
+        msg = f"Unable to evaluate marker for {req}: {e}"
         logger.error(msg)
         raise RuntimeError(msg) from e
 
@@ -173,17 +161,17 @@ def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
         except PackageNotFoundError:
             unsatisfied.append(_strip_marker(req_str))
         except Exception as e:
-            msg = f'Unable to check satisfaction {req_str}: {e}'
+            msg = f"Unable to check satisfaction {req_str}: {e}"
             logger.error(msg)
             raise RuntimeError(msg) from e
 
     for ref in module.refs:
-        req_str = f'{ref.name}{ref.require}' if ref.require else ref.name
-        req_git = f'{ref.name} @ git+{ref.repo}'
+        req_str = f"{ref.name}{ref.require}" if ref.require else ref.name
+        req_git = f"{ref.name} @ git+{ref.repo}"
         if ref.revision:
-            req_git += f'@{ref.revision}'
+            req_git += f"@{ref.revision}"
         if ref.subdir:
-            req_git += f'#subdirectory={ref.subdir}'
+            req_git += f"#subdirectory={ref.subdir}"
 
         try:
             req = Requirement(req_str)
@@ -196,7 +184,7 @@ def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
         except PackageNotFoundError:
             unsatisfied.append(req_git)
         except Exception as e:
-            msg = f'Unable to check satisfaction {req_str}: {e}'
+            msg = f"Unable to check satisfaction {req_str}: {e}"
             logger.error(msg)
             raise RuntimeError(msg) from e
 
@@ -212,14 +200,14 @@ def package_manager() -> list[str]:
         return [uv_exe, "pip"]
 
     # check pip
-    try:
-        import pip
-    except ImportError:
-        logger.info('Install pip via ensurepip')
+    from importlib.util import find_spec
+
+    if find_spec("pip") is None:
+        logger.info("Install pip via ensurepip")
         ensurepip.bootstrap()
 
     logger.info(f"Using package manager: {get_pip_version()}")
-    return [sys.executable, '-m', 'pip']
+    return [sys.executable, "-m", "pip"]
 
 
 def _filter_applicable_requirements(requirements: list[str]) -> list[str]:
@@ -230,14 +218,16 @@ def _filter_applicable_requirements(requirements: list[str]) -> list[str]:
             if _marker_applies(req):
                 applicable.append(_strip_marker(req_str))
         except Exception as e:
-            msg = f'Unable to parse requirement {req_str}: {e}'
+            msg = f"Unable to parse requirement {req_str}: {e}"
             logger.error(msg)
             raise RuntimeError(msg) from e
     return applicable
 
 
-def _tee_pipe(src: io.RawIOBase, dst: io.TextIOBase, buf: io.BytesIO):
-    dst_buf = dst.buffer
+def _tee_pipe(src: IO[bytes], dst: io.TextIOBase, buf: io.BytesIO):
+    dst_buf = getattr(dst, "buffer", None)
+    if dst_buf is None:
+        return
     dst_flush = dst.flush
     while True:
         chunk = src.read(65536)
@@ -249,28 +239,32 @@ def _tee_pipe(src: io.RawIOBase, dst: io.TextIOBase, buf: io.BytesIO):
     src.close()
 
 
-def install_requirements(requirements: list[str], *, index_url: str = None, trusted_host: str | bool = None):
+def install_requirements(
+    requirements: list[str], *, index_url: str | None = None, trusted_host: str | bool | None = None
+):
     if not requirements:
         return
 
     applicable_reqs = _filter_applicable_requirements(requirements)
     if not applicable_reqs:
-        logger.info(f'All requirements filtered out by environment markers, nothing to install: {requirements}')
+        logger.info(f"All requirements filtered out by environment markers, nothing to install: {requirements}")
         return
 
-    cmd = [*package_manager(), 'install'] + applicable_reqs
+    cmd: list[str] = [*package_manager(), "install"] + applicable_reqs
+    trusted_host_: str | bool | None = trusted_host
     if index_url:
-        cmd += ['--index-url', index_url]
-    if trusted_host:
-        if isinstance(trusted_host, bool):
+        cmd += ["--index-url", index_url]
+    if trusted_host_:
+        if isinstance(trusted_host_, bool):
             if index_url:
                 parsed = urllib.parse.urlparse(index_url)
-                trusted_host = parsed.hostname
-                cmd += ['--trusted-host', trusted_host]
+                hn = parsed.hostname
+                if hn:
+                    cmd += ["--trusted-host", hn]
         else:
-            cmd += ['--trusted-host', trusted_host]
+            cmd += ["--trusted-host", trusted_host_]
 
-    logger.info(f'Install requirements in subprocess:\n{" ".join(cmd)}')
+    logger.info(f"Install requirements in subprocess:\n{' '.join(cmd)}")
 
     try:
         proc = subprocess.Popen(
@@ -280,11 +274,7 @@ def install_requirements(requirements: list[str], *, index_url: str = None, trus
         )
 
         stderr_buf = io.BytesIO()
-        tee_thread = threading.Thread(
-            target=_tee_pipe,
-            args=(proc.stderr, sys.stderr, stderr_buf),
-            daemon=True
-        )
+        tee_thread = threading.Thread(target=_tee_pipe, args=(proc.stderr, sys.stderr, stderr_buf), daemon=True)
         tee_thread.start()
 
         returncode = proc.wait()
@@ -293,25 +283,27 @@ def install_requirements(requirements: list[str], *, index_url: str = None, trus
         if returncode != 0:
             stderr_bytes = stderr_buf.getvalue()
             stderr = _decode_stderr(stderr_bytes)
-            msg = f'Failed to install requirements {" ".join(requirements)} (exit code {returncode}):\n{stderr}'
+            msg = f"Failed to install requirements {' '.join(requirements)} (exit code {returncode}):\n{stderr}"
             logger.error(msg)
             raise RuntimeError(msg)
-    except FileNotFoundError:
-        msg = f'Python executable not found: {sys.executable}'
+    except FileNotFoundError as e:
+        msg = f"Python executable not found: {sys.executable}"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
     except Exception as e:
-        msg = f'Failed to execute uv pip or pip install {" ".join(requirements)}: {e}'
+        msg = f"Failed to execute uv pip or pip install {' '.join(requirements)}: {e}"
         logger.error(msg)
         raise RuntimeError(msg) from e
 
 
-def install_module_requirements(module: schema.ModuleSpec, *, index_url: str = None, trusted_host: str | bool = None):
+def install_module_requirements(
+    module: schema.ModuleSpec, *, index_url: str | None = None, trusted_host: str | bool | None = None
+):
     unsatisfied = unsatisfied_requirements(module)
     install_requirements(unsatisfied)
 
 
-def import_entry(entry: schema.Entry | None) -> tuple[Callable | None,  str | None]:
+def import_entry(entry: schema.Entry | None) -> tuple[Callable | None, str | None]:
     """
     :param entry:
     :return: entry function and failed import package name if that's the reason
@@ -321,10 +313,10 @@ def import_entry(entry: schema.Entry | None) -> tuple[Callable | None,  str | No
 
     method = entry.method
     if entry.package:
-        method = '.'.join([entry.package, method])
-    if '.' not in method:
+        method = ".".join([entry.package, method])
+    if "." not in method:
         return None, None
-    lib_name, func_name = method.rsplit('.', 1)
+    lib_name, func_name = method.rsplit(".", 1)
 
     try:
         lib = importlib.import_module(lib_name)
@@ -333,7 +325,7 @@ def import_entry(entry: schema.Entry | None) -> tuple[Callable | None,  str | No
 
     try:
         func = getattr(lib, func_name)
-    except AttributeError as e:
+    except AttributeError:
         return None, None
 
     if not callable(func):
@@ -342,29 +334,29 @@ def import_entry(entry: schema.Entry | None) -> tuple[Callable | None,  str | No
     return func, None
 
 
-def call_entry(entry: schema.Entry, optional_kwargs: dict[str, Any] = None) -> Any:
+def call_entry(entry: schema.Entry, optional_kwargs: dict[str, Any] | None = None) -> Any:
     method = entry.method
     if entry.package:
-        method = '.'.join([entry.package, method])
-    if '.' not in method:
-        raise RuntimeError('Global function calls are not supported')
-    lib_name, func_name = method.rsplit('.', 1)
+        method = ".".join([entry.package, method])
+    if "." not in method:
+        raise RuntimeError("Global function calls are not supported")
+    lib_name, func_name = method.rsplit(".", 1)
 
     try:
         lib = importlib.import_module(lib_name)
     except ImportError as e:
-        logger.error(f'Can not import module {lib_name}: {e}')
+        logger.error(f"Can not import module {lib_name}: {e}")
         raise
 
     try:
         func = getattr(lib, func_name)
     except AttributeError as e:
-        msg = f'Can not find {func_name} in module {lib_name}'
+        msg = f"Can not find {func_name} in module {lib_name}"
         logger.error(msg)
         raise AttributeError(msg) from e
 
     if not callable(func):
-        msg = f'{method} is not callable'
+        msg = f"{method} is not callable"
         logger.error(msg)
         raise RuntimeError(msg)
 
@@ -378,32 +370,43 @@ def call_entry(entry: schema.Entry, optional_kwargs: dict[str, Any] = None) -> A
 
     try:
         return func(*args, **kwargs)
-    except Exception as e:
-        logger.error(f'Failed to call method {method} with args={args}, kwargs={kwargs}')
+    except Exception:
+        logger.error(f"Failed to call method {method} with args={args}, kwargs={kwargs}")
         raise
 
 
 def load_package(package: schema.Package) -> api.Package:
-    return call_entry(package.entry)
+    result: api.Package = call_entry(package.entry)
+    return result
 
 
-def hello(*args, **kwargs):
-    print('helloworld', args, kwargs)
+def hello(*args: Any, **kwargs: Any):
+    print("helloworld", args, kwargs)
 
 
 def test():
-    call_entry(schema.Entry(
-        package='seetapsych_lib.runtime.actions', method='hello',
-        args=[1, '2', False], kwargs={'a': 1}))
-    requirements = [
-        'cowsay',
-        'packaging>=25.0'
-    ]
-    module = schema.Module(module={'requirements': requirements}, packages=[])
+    call_entry(
+        schema.Entry(
+            package="seetapsych_lib.runtime.actions",
+            method="hello",
+            args=[1, "2", False],
+            kwargs={"a": 1},
+        )
+    )
+    requirements = ["cowsay", "packaging>=25.0"]
+    module_spec = schema.ModuleSpec(
+        uid="test-action-module",
+        name="Test Action Module",
+        version="",
+        description="",
+        keywords=[],
+        requirements=requirements,
+        refs=[],
+    )
 
-    print(unsatisfied_requirements(module))
-    install_module_requirements(module)
+    print(unsatisfied_requirements(module_spec))
+    install_module_requirements(module_spec)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test()

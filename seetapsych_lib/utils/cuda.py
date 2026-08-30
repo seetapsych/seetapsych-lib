@@ -5,13 +5,12 @@ import subprocess
 
 import pynvml
 
-
 __all__ = [
-    'list_nvidia_devices',
+    "list_nvidia_devices",
 ]
 
 
-def list_nvidia_devices():
+def list_nvidia_devices() -> list[str]:
     """
     Cross-platform detection of NVIDIA GPUs.
     Returns a list of GPU names. Returns an empty list if no NVIDIA GPU or driver is found.
@@ -28,7 +27,7 @@ def list_nvidia_devices():
             name = pynvml.nvmlDeviceGetName(handle)
             # pynvml 12+ versions may return bytes, need to decode
             if isinstance(name, bytes):
-                name = name.decode('utf-8')
+                name = name.decode("utf-8")
             gpu_names.append(name)
         pynvml.nvmlShutdown()
         if gpu_names:
@@ -41,9 +40,9 @@ def list_nvidia_devices():
         if system == "Windows":
             # Method A: Try nvidia-smi (Standard method)
             try:
-                output = subprocess.check_output(['nvidia-smi', '--list-gpus'], stderr=subprocess.STDOUT)
+                output = subprocess.check_output(["nvidia-smi", "--list-gpus"], stderr=subprocess.STDOUT)
                 # Output format: "GPU 0: NVIDIA GeForce RTX 3090 (UUID: ...)"
-                lines = output.decode('utf-8', errors='ignore').strip().split('\n')
+                lines = output.decode("utf-8", errors="ignore").strip().split("\n")
                 for line in lines:
                     if "GPU" in line and ":" in line:
                         # Extract name between ":" and "("
@@ -58,11 +57,9 @@ def list_nvidia_devices():
             # Queries the display adapters directly from the system
             try:
                 output = subprocess.check_output(
-                    'wmic path win32_VideoController get name',
-                    shell=True,
-                    stderr=subprocess.STDOUT
+                    "wmic path win32_VideoController get name", shell=True, stderr=subprocess.STDOUT
                 )
-                lines = output.decode('gbk', errors='ignore').strip().split('\n')
+                lines = output.decode("gbk", errors="ignore").strip().split("\n")
                 for line in lines:
                     line = line.strip()
                     # Filter header and empty lines, look for NVIDIA keyword
@@ -75,8 +72,8 @@ def list_nvidia_devices():
         elif system == "Linux":
             # Method A: Try nvidia-smi
             try:
-                output = subprocess.check_output(['nvidia-smi', '--list-gpus'], stderr=subprocess.STDOUT)
-                lines = output.decode('utf-8', errors='ignore').strip().split('\n')
+                output = subprocess.check_output(["nvidia-smi", "--list-gpus"], stderr=subprocess.STDOUT)
+                lines = output.decode("utf-8", errors="ignore").strip().split("\n")
                 for line in lines:
                     if "GPU" in line and ":" in line:
                         name = line.split(":")[1].split("(")[0].strip()
@@ -88,8 +85,8 @@ def list_nvidia_devices():
 
             # Method B: Linux specific fallback using lspci (Hardware level check)
             try:
-                output = subprocess.check_output('lspci | grep -i nvidia', shell=True, stderr=subprocess.STDOUT)
-                devices = output.decode('utf-8', errors='ignore').strip().split('\n')
+                output = subprocess.check_output("lspci | grep -i nvidia", shell=True, stderr=subprocess.STDOUT)
+                devices = output.decode("utf-8", errors="ignore").strip().split("\n")
                 for device in devices:
                     if device:
                         gpu_names.append(device.strip())
@@ -101,6 +98,7 @@ def list_nvidia_devices():
         pass
 
     return gpu_names
+
 
 # --- Usage Example ---
 if __name__ == "__main__":

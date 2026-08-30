@@ -1,40 +1,39 @@
 # -*- coding: utf-8 -*-
 
+import multiprocessing as mp
 import queue
 import threading
 import time
 import traceback
-import multiprocessing as mp
-from collections import defaultdict
-from enum import Enum
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import Optional, Any, Literal, Callable
+from enum import Enum
 from multiprocessing import synchronize as sc
+from typing import Any, Callable, Literal, Optional, cast
 
-from seetapsych_lib.utils.logger import logger
 from seetapsych_lib.runtime.parallel.future import Future, WritableFuture
-
+from seetapsych_lib.utils.logger import logger
 
 __all__ = [
-    'Executor',
-    'ParallelExecutor',
+    "Executor",
+    "ParallelExecutor",
 ]
 
 
 class Executor(ABC):
     """
-    The parallel executor in sub process. Witch created in host process and `init` and `run` in sub process.
+    The parallel executor in sub process. Created in host process,
+    `init` and `run` are executed in sub process.
     """
-    @abstractmethod
-    def init(self):
-        ...
 
     @abstractmethod
-    def run(self, *args, **kwargs):
-        ...
+    def init(self): ...
 
-    def action(self, data):
+    @abstractmethod
+    def run(self, *args: Any, **kwargs: Any) -> Any: ...
+
+    def action(self, data: Any):  # noqa: B027
         pass
 
 
@@ -51,7 +50,7 @@ class NodeSpec:
 
 @dataclass
 class HealthEvent:
-    level: Literal['INFO', 'WARNING', 'ERROR']
+    level: Literal["INFO", "WARNING", "ERROR"]
     source: str
     message: str
     detail: Optional[str] = None
@@ -80,7 +79,7 @@ class TimeEvent:
     time_seconds: float
 
 
-class TimeSummary(object):
+class TimeSummary:
     def __init__(self):
         self.__lock = threading.Lock()
         self.__summary: dict[str, list[float | int]] = defaultdict(lambda: [int(0), float(0)])
@@ -97,7 +96,7 @@ class TimeSummary(object):
 
     def summary(self) -> dict[str, float]:
         with self.__lock:
-            return { tag: round(value[1] / value[0], 3)  for tag, value in self.__summary.items() }
+            return {tag: round(value[1] / value[0], 3) for tag, value in self.__summary.items()}
 
 
 def process_node_main(spec: NodeSpec):
@@ -132,7 +131,7 @@ def process_node_main(spec: NodeSpec):
         )
         exit(1)
 
-    def run_action(data):
+    def run_action(data: Any):
         try:
             spec.executor.action(data)
         except Exception:
@@ -178,7 +177,7 @@ def process_node_main(spec: NodeSpec):
 
             sync_ids = {msg.sync_id for msg in input_messages}
             if len(sync_ids) != 1:
-                logger.warning(f'Received inconsistent sync ids {sync_ids}')
+                logger.warning(f"Received inconsistent sync ids {sync_ids}")
             sync_id = input_messages[0].sync_id
 
             # run in probe mode
@@ -255,17 +254,17 @@ class GatherExecutor(Executor):
     def init(self):
         pass
 
-    def run(self, *args, **kwargs):
+    def run(self, *args: Any, **kwargs: Any) -> Any:
         return args
 
 
-class ParallelExecutor(object):
+class ParallelExecutor:
     def __init__(self, profile: bool = False):
         self.__stop_event = mp.Event()
-        self.__health_queue = mp.Queue()
-        self.__time_queue = mp.Queue()
+        self.__health_queue: "mp.Queue[Any]" = mp.Queue()
+        self.__time_queue: "mp.Queue[Any]" = mp.Queue()
 
-        self.__id = 1   # 0 for input, -1 for output
+        self.__id = 1  # 0 for input, -1 for output
         self.__nodes: dict[int, NodeSpec] = {}
         self.__links: list[tuple[int, int]] = []
 
@@ -280,9 +279,9 @@ class ParallelExecutor(object):
         self.__watch_process_threads: list[threading.Thread] = []
         self.__monitor_threads: list[threading.Thread] = []
 
-        self.__final_queue = mp.Queue()
+        self.__final_queue: "mp.Queue[Any]" = mp.Queue()
         self.__final_output: NodeSpec = NodeSpec(
-            name='__output__',
+            name="__output__",
             inputs=self.__output_queues,
             outputs=[self.__final_queue],
             executor=GatherExecutor(),
@@ -331,7 +330,7 @@ class ParallelExecutor(object):
 
         # create queue for link
         for link in self.__links:
-            q = mp.Queue()
+            q: "mp.Queue[Any]" = mp.Queue()
             self.__queues[link] = q
 
             if link[0] == 0:
@@ -423,7 +422,6 @@ class ParallelExecutor(object):
 
     def _thread_dispatch_output(self):
         while not self.__stop_event.is_set():
-
             try:
                 msg: Message = self.__final_queue.get(timeout=0.2)
             except queue.Empty:
@@ -433,7 +431,7 @@ class ParallelExecutor(object):
                 break
 
             with self.__futures_lock:
-                future = self.__futures.pop(msg.sync_id, None)
+                future = self.__futures.pop(cast(int, msg.sync_id), None)
 
                 # clear cancelled feature
                 items = list(self.__futures.items())
@@ -450,18 +448,14 @@ class ParallelExecutor(object):
             elif msg.type == MessageType.DATA:
                 future.set_result(msg.payload)
             elif msg.type == MessageType.ERROR:
-                future.set_error(
-                    RuntimeError(f"received error from node {msg.source}: {msg.payload}")
-                )
+                future.set_error(RuntimeError(f"received error from node {msg.source}: {msg.payload}"))
             else:
-                future.set_error(
-                    RuntimeError(f"received unexpected message: {msg}")
-                )
+                future.set_error(RuntimeError(f"received unexpected message: {msg}"))
 
         # finalize not finished futures
         with self.__futures_lock:
             for future in self.__futures.values():
-                future.set_error(RuntimeError('executor stopped'))
+                future.set_error(RuntimeError("executor stopped"))
             self.__futures.clear()
 
     def _clear(self):
@@ -479,7 +473,7 @@ class ParallelExecutor(object):
 
     def start(self):
         if self.__started:
-            raise RuntimeError('cannot start a running parallel executor')
+            raise RuntimeError("cannot start a running parallel executor")
 
         self._compile()
 
@@ -487,7 +481,7 @@ class ParallelExecutor(object):
         for i, spec in self.__nodes.items():
             p = mp.Process(
                 target=process_node_main,
-                name=f'seetapsych:{spec.name}',
+                name=f"seetapsych:{spec.name}",
                 args=(spec,),
                 daemon=False,
             )
@@ -535,7 +529,7 @@ class ParallelExecutor(object):
         # use probe check initialize ready
         try:
             if not self.probe():
-                raise RuntimeError('run probe failed after start')
+                raise RuntimeError("run probe failed after start")
         except RuntimeError:
             self.dispose()
             self._clear()
@@ -545,13 +539,13 @@ class ParallelExecutor(object):
         sync_id = self.__sync_id
         self.__sync_id += 1
 
-        future = WritableFuture()
+        future: WritableFuture[Any] = WritableFuture()
 
         input_msg = Message(
             type=MessageType.PROBE,
             sync_id=sync_id,
             payload=None,
-            source='__input__',
+            source="__input__",
         )
 
         with self.__futures_lock:
@@ -562,7 +556,7 @@ class ParallelExecutor(object):
 
         return future.wait() and future.error is None
 
-    def submit(self, payload: Any, cascade: Callable[[Any], Any] | None = None) -> Future:
+    def submit(self, payload: Any, cascade: Callable[[Any], Any] | None = None) -> Future[Any]:
         sync_id = self.__sync_id
         self.__sync_id += 1
 
@@ -572,7 +566,7 @@ class ParallelExecutor(object):
             type=MessageType.DATA,
             sync_id=sync_id,
             payload=payload,
-            source='__input__',
+            source="__input__",
         )
 
         with self.__futures_lock:
@@ -585,7 +579,7 @@ class ParallelExecutor(object):
 
     def execute(self, pyload: Any, timeout: float | None = None) -> list[Any]:
         future = self.submit(pyload)
-        return future.get(timeout=timeout)
+        return cast(list[Any], future.get(timeout=timeout))
 
     def action(self, data: Any):
         action_msg = Message(
@@ -627,11 +621,11 @@ class ParallelExecutor(object):
         for p in self.__processes.values():
             p.kill()
 
-    def join(self, timeout=None):
+    def join(self, timeout: float | None = None):
         for p in self.__processes.values():
             p.join(timeout)
 
-    def dispose(self, wait_seconds=None):
+    def dispose(self, wait_seconds: float | None = None):
         """
         send stop message, and wait some time before kill them
         :param wait_timeout:
@@ -680,5 +674,5 @@ def main():
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

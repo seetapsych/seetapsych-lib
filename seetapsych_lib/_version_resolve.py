@@ -26,7 +26,6 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-
 __all__ = [
     "__version__",
     "get_version",
@@ -111,7 +110,11 @@ def get_version() -> str:
         return built
     if _inside_git_worktree():
         raw = _run_git(
-            "describe", "--tags", "--long", "--always", "--match=r[0-9]*",
+            "describe",
+            "--tags",
+            "--long",
+            "--always",
+            "--match=r[0-9]*",
         )
         if raw:
             return _parse_git_describe(raw)

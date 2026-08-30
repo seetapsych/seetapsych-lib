@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from packaging.version import Version, InvalidVersion
+from packaging.version import InvalidVersion, Version
 
 import seetapsych_lib
 from seetapsych_lib.utils.logger import logger
@@ -35,5 +35,5 @@ def main() -> Optional[int]:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit(main())

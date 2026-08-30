@@ -12,12 +12,11 @@ from seetapsych_lib.runtime.pipeline import Pipeline
 from seetapsych_lib.utils.cuda import list_nvidia_devices
 from seetapsych_lib.utils.logger import logger
 
-
 __all__ = [
-    'Runner',
-    'PipelineHasProblem',
-    'PipelineUnsatisfied',
-    'MissingInputModal',
+    "Runner",
+    "PipelineHasProblem",
+    "PipelineUnsatisfied",
+    "MissingInputModal",
 ]
 
 
@@ -33,7 +32,7 @@ class MissingInputModal(Exception):
     pass
 
 
-class TimeSummary(object):
+class TimeSummary:
     def __init__(self):
         self.__summary: dict[str, list[float | int]] = defaultdict(lambda: [int(0), float(0)])
 
@@ -46,26 +45,30 @@ class TimeSummary(object):
         self.__summary.clear()
 
     def summary(self) -> dict[str, float]:
-        return { tag: round(value[1] / value[0], 3)  for tag, value in self.__summary.items() }
+        return {tag: round(value[1] / value[0], 3) for tag, value in self.__summary.items()}
 
 
-class Runner(object):
+class Runner:
     def __init__(
-            self,
-            pipeline: Pipeline, device: api.Device | str = None,
-            *, cache_dir: str = None, profile: bool = False):
+        self,
+        pipeline: Pipeline,
+        device: api.Device | str | None = None,
+        *,
+        cache_dir: str | None = None,
+        profile: bool = False,
+    ):
         if isinstance(device, str):
             device = api.Device(device)
 
-        if device is None or not device.type or device.type.lower() == 'auto':
+        if device is None or not device.type or device.type.lower() == "auto":
             nvidia_devices = list_nvidia_devices()
             if nvidia_devices:
-                device_info = '\n'.join([f'    - {d}' for d in nvidia_devices])
-                logger.info(f'Detected {len(nvidia_devices)} NVIDIA GPU(s).\n{device_info}')
-                device = api.Device('cuda')
+                device_info = "\n".join([f"    - {d}" for d in nvidia_devices])
+                logger.info(f"Detected {len(nvidia_devices)} NVIDIA GPU(s).\n{device_info}")
+                device = api.Device("cuda")
             else:
-                logger.info('No NVIDIA GPU or compatible driver detected.')
-                device = api.Device('cpu')
+                logger.info("No NVIDIA GPU or compatible driver detected.")
+                device = api.Device("cpu")
 
         self.__start_frame_tick = 1
 
@@ -117,7 +120,7 @@ class Runner(object):
     def inputs(self) -> list[str]:
         return self.__inputs
 
-    def run(self, data: dict[str, Any] | Any, timestamp: float = None) -> dict[str, Any]:
+    def run(self, data: dict[str, Any] | Any, timestamp: float | None = None) -> dict[str, Any]:
         if not self.__instances:
             return {}
 
@@ -127,7 +130,7 @@ class Runner(object):
 
         # check input modals
         if not isinstance(data, dict):
-            data = {'default': data}
+            data = {"default": data}
 
         missing_modals = [modal for modal in self.__inputs if modal not in data]
         if missing_modals:
@@ -136,12 +139,12 @@ class Runner(object):
         reports = []
         updates = []
         report = {
-            'time': timestamp,
-            'frame_tick': self.__frame_tick,
+            "time": timestamp,
+            "frame_tick": self.__frame_tick,
         }
 
         # inference each instance
-        for package, instance in zip(self.__pipeline.packages, self.__instances):
+        for package, instance in zip(self.__pipeline.packages, self.__instances, strict=False):
             start_time_seconds = time.perf_counter()
             update = instance.inference(data=data, report=report)
             time_seconds = time.perf_counter() - start_time_seconds
@@ -177,5 +180,5 @@ def test():
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test()

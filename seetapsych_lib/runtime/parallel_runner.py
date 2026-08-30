@@ -3,32 +3,30 @@
 import copy
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, Literal
+from typing import Any, Literal, Optional
 
-from seetapsych_lib import api
+from seetapsych_lib import api, schema
 from seetapsych_lib.runtime.actions import load_package
 from seetapsych_lib.runtime.model import build_model
-from seetapsych_lib.runtime.pipeline import Pipeline
-from seetapsych_lib.utils.cuda import list_nvidia_devices
-from seetapsych_lib.utils.logger import logger
-from seetapsych_lib import schema
 from seetapsych_lib.runtime.parallel.executor import Executor, ParallelExecutor
 from seetapsych_lib.runtime.parallel.future import Future, WritableFuture
-from seetapsych_lib.runtime.runner import PipelineHasProblem, PipelineUnsatisfied, MissingInputModal
-
+from seetapsych_lib.runtime.pipeline import Pipeline
+from seetapsych_lib.runtime.runner import MissingInputModal, PipelineHasProblem, PipelineUnsatisfied
+from seetapsych_lib.utils.cuda import list_nvidia_devices
+from seetapsych_lib.utils.logger import logger
 
 __all__ = [
-    'ParallelRunner',
+    "ParallelRunner",
 ]
 
 
-class PackageNode(object):
-    def __init__(self, packages: list[schema.Package], inputs: list['PackageNode'] = None):
+class PackageNode:
+    def __init__(self, packages: list[schema.Package], inputs: list["PackageNode"] | None = None):
         if inputs is None:
             inputs = []
 
-        requires = []
-        provides = []
+        requires: list[str] = []
+        provides: list[str] = []
         for p in packages:
             requires.extend(p.requires)
             provides.extend((set(p.provides) - set(p.requires)))
@@ -38,7 +36,7 @@ class PackageNode(object):
         self.__packages = packages
         self.__inputs = inputs
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return id(self)
 
     @property
@@ -58,7 +56,7 @@ class PackageNode(object):
         return self.__packages
 
     @property
-    def inputs(self) -> list['PackageNode']:
+    def inputs(self) -> list["PackageNode"]:
         return self.__inputs
 
 
@@ -75,7 +73,7 @@ def build_graph(packages: list[schema.Package]) -> list[PackageNode]:
         for attr in p.requires:
             inode = node_providers.get(attr, None)
             if inode is None:
-                raise RuntimeError(f'Can not find attribute provider for {attr}')
+                raise RuntimeError(f"Can not find attribute provider for {attr}")
             inputs.append(inode)
         inputs = list(set(inputs))
         node = PackageNode(packages=[p], inputs=inputs)
@@ -96,18 +94,22 @@ class ExchangeData:
     data: dict[str, Any]
     report: dict[str, Any]
 
+
 @dataclass
 class ExchangeAction:
-    action: Literal['reset']
+    action: Literal["reset"]
 
 
 class PackageExecutor(Executor):
     def __init__(
-            self,
-            package: schema.Package,
-            models: list[schema.Model],
-            parameters: list[schema.Parameter],
-            device: api.Device = None, *, cache_dir: str = None):
+        self,
+        package: schema.Package,
+        models: list[schema.Model],
+        parameters: list[schema.Parameter],
+        device: api.Device | None = None,
+        *,
+        cache_dir: str | None = None,
+    ):
         self.__package = package
         self.__models = models
         self.__parameters = parameters
@@ -117,44 +119,44 @@ class PackageExecutor(Executor):
 
         self.__instance: Optional[api.Instance] = None
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return id(self)
 
     def init(self):
         package = self.__package
-        models = self.__models
-        parameters = self.__parameters
+        _cfg_models = self.__models
+        _cfg_parameters = self.__parameters
         device = self.__device
         cache_dir = self.__cache_dir
 
         loaded_package = load_package(package)
 
         # get models and parameters
-        config_models = models
-        config_parameters = parameters
+        config_models = _cfg_models
+        config_parameters = _cfg_parameters
 
-        models: list[api.UsageModel] = []
+        usage_models: list[api.UsageModel] = []
         for model_config in config_models:
-            models.append(build_model(model_config, cache_dir=cache_dir))
+            usage_models.append(build_model(model_config, cache_dir=cache_dir))
 
-        parameters: dict[str, Any] = {}
+        parameter_dict: dict[str, Any] = {}
         for param in package.parameters:
-            parameters[param.name] = param.value
+            parameter_dict[param.name] = param.value
         for param in config_parameters:
-            parameters[param.name] = param.value
+            parameter_dict[param.name] = param.value
 
         # central cache models
-        for model in models:
+        for model in usage_models:
             model.cache()
 
-        instance = loaded_package.create(models=models, parameters=parameters, device=device)
+        instance = loaded_package.create(models=usage_models, parameters=parameter_dict, device=device)
         self.__instance = instance
 
     def action(self, data: ExchangeAction):
         assert self.__instance is not None
 
         match data.action:
-            case 'reset':
+            case "reset":
                 self.__instance.reset()
 
     def run(self, *args: ExchangeData) -> ExchangeData:
@@ -173,12 +175,15 @@ class PackageExecutor(Executor):
         )
 
 
-class ParallelRunner(object):
+class ParallelRunner:
     def __init__(
-            self,
-            pipeline: Pipeline,
-            device: api.Device | str | dict[str, api.Device | str] = None,
-            *, cache_dir: str = None, profile: bool = False):
+        self,
+        pipeline: Pipeline,
+        device: api.Device | str | dict[str, api.Device | str] | None = None,
+        *,
+        cache_dir: str | None = None,
+        profile: bool = False,
+    ):
         self.__parallel_executor: ParallelExecutor | None = None
 
         global_device: Optional[api.Device] = None
@@ -188,10 +193,7 @@ class ParallelRunner(object):
         if isinstance(device, str):
             device = api.Device(device)
 
-        if device is None \
-                or isinstance(device, dict) \
-                or not device.type \
-                or device.type.lower() == 'auto':
+        if device is None or isinstance(device, dict) or not device.type or device.type.lower() == "auto":
             # auto select device
             if isinstance(device, dict):
                 for attr, dev in device.items():
@@ -201,21 +203,21 @@ class ParallelRunner(object):
             # list nvidia devices
             nvidia_devices = list_nvidia_devices()
             if nvidia_devices:
-                device_info = '\n'.join([f'    - {d}' for d in nvidia_devices])
-                logger.info(f'Detected {len(nvidia_devices)} NVIDIA GPU(s).\n{device_info}')
-                device_pool.extend([api.Device('cuda', i) for i in range(len(nvidia_devices))])
+                device_info = "\n".join([f"    - {d}" for d in nvidia_devices])
+                logger.info(f"Detected {len(nvidia_devices)} NVIDIA GPU(s).\n{device_info}")
+                device_pool.extend([api.Device("cuda", i) for i in range(len(nvidia_devices))])
             else:
-                logger.info('No NVIDIA GPU or compatible driver detected.')
-                device_pool.extend([api.Device('cpu')])
+                logger.info("No NVIDIA GPU or compatible driver detected.")
+                device_pool.extend([api.Device("cpu")])
         else:
             assert isinstance(device, api.Device)
             global_device = device
 
         if global_device is None:
-            global_device = attribute_device_map.get('', None) \
-                            or attribute_device_map.get('_', None)
+            global_device = attribute_device_map.get("", None) or attribute_device_map.get("_", None)
 
         select_index = 0
+
         def select_device(p: schema.Package) -> api.Device:
             # check attribute map
             for a in p.provides:
@@ -229,7 +231,7 @@ class ParallelRunner(object):
 
             # device pool is empty
             if not device_pool:
-                return api.Device('cpu')
+                return api.Device("cpu")
 
             # random select from pool
             nonlocal select_index
@@ -286,16 +288,16 @@ class ParallelRunner(object):
         return self.__inputs
 
     def run_async(
-            self,
-            data: dict[str, Any] | Any,
-            timestamp: float = None,
+        self,
+        data: dict[str, Any] | Any,
+        timestamp: float | None = None,
     ) -> Future[dict[str, Any]]:
         assert self.__parallel_executor is not None
 
         if not self.__graph:
-            future = WritableFuture()
-            future.set_result({})
-            return future
+            future_result: WritableFuture[dict[str, Any]] = WritableFuture()
+            future_result.set_result({})
+            return future_result
 
         # get timestamp
         if timestamp is None:
@@ -303,15 +305,15 @@ class ParallelRunner(object):
 
         # check input modals
         if not isinstance(data, dict):
-            data = {'default': data}
+            data = {"default": data}
 
         missing_modals = [modal for modal in self.__inputs if modal not in data]
         if missing_modals:
             raise MissingInputModal(missing_modals)
 
         report = {
-            'time': timestamp,
-            'frame_tick': self.__frame_tick,
+            "time": timestamp,
+            "frame_tick": self.__frame_tick,
         }
         self.__frame_tick += 1
 
@@ -319,6 +321,7 @@ class ParallelRunner(object):
             data=data,
             report=report,
         )
+
         def merge_data(output_data: list[ExchangeData]) -> dict[str, Any]:
             local_report = copy.copy(report)
             for ex in output_data:
@@ -330,10 +333,10 @@ class ParallelRunner(object):
         return future
 
     def run(
-            self,
-            data: dict[str, Any] | Any,
-            timestamp: float = None,
-            timeout: float = None,
+        self,
+        data: dict[str, Any] | Any,
+        timestamp: float | None = None,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         return self.run_async(data, timestamp).get(timeout=timeout)
 
@@ -342,7 +345,7 @@ class ParallelRunner(object):
 
         self.__frame_tick = self.__start_frame_tick
 
-        exchange_action = ExchangeAction(action='reset')
+        exchange_action = ExchangeAction(action="reset")
         self.__parallel_executor.action(exchange_action)
 
     def dispose(self):
@@ -362,5 +365,5 @@ def test():
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test()

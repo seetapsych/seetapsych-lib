@@ -2,19 +2,17 @@
 
 import os
 import re
-
 from typing import Any
 from urllib.parse import unquote
 
-if not os.environ.get('LANG'):
-    os.environ['LANG'] = 'en_US.UTF-8'
+if not os.environ.get("LANG"):
+    os.environ["LANG"] = "en_US.UTF-8"
 
 import jsonschema2md
 
-
 __all__ = [
-    'schema2markdown',
-    'sanitize_markdown_links',
+    "schema2markdown",
+    "sanitize_markdown_links",
 ]
 
 
@@ -29,10 +27,7 @@ def _compact_truncate_list(lst: list[Any]) -> str | list[Any]:
 
 def _compact_process_value(value: Any, in_examples: bool = False) -> Any:
     if isinstance(value, dict):
-        return {
-            k: _compact_process_value(v, in_examples or (k == "examples"))
-            for k, v in value.items()
-        }
+        return {k: _compact_process_value(v, in_examples or (k == "examples")) for k, v in value.items()}
     if isinstance(value, list):
         if in_examples:
             truncated = _compact_truncate_list(value)
@@ -44,22 +39,20 @@ def _compact_process_value(value: Any, in_examples: bool = False) -> Any:
 
 
 def _compact_examples(schema: dict[str, Any]) -> dict[str, Any]:
-    return _compact_process_value(schema, in_examples=False)
+    result = _compact_process_value(schema, in_examples=False)
+    assert isinstance(result, dict)
+    return result
 
 
 def _sanitize_id(s: str) -> str:
     s = unquote(s)
-    s = re.sub(r'[^a-zA-Z0-9_-]+', '-', s)
-    s = re.sub(r'-+', '-', s)
-    return s.strip('-')
+    s = re.sub(r"[^a-zA-Z0-9_-]+", "-", s)
+    s = re.sub(r"-+", "-", s)
+    return s.strip("-")
 
 
 def sanitize_markdown_links(text: str) -> str:
-    text = re.sub(
-        r'\[#/\$defs/([^\]]+)\]',
-        r'[\1]',
-        text
-    )
+    text = re.sub(r"\[#/\$defs/([^\]]+)\]", r"[\1]", text)
 
     def link_replacer(m: re.Match[str]) -> str:
         display = m.group(1)
@@ -67,12 +60,12 @@ def sanitize_markdown_links(text: str) -> str:
         clean = _sanitize_id(orig_fragment)
         if clean == orig_fragment:
             return m.group(0)
-        return f'[{display}](#{clean})'
+        return f"[{display}](#{clean})"
 
-    text = re.sub(r'\[([^\]]+)\]\(#([^)]+)\)', link_replacer, text)
+    text = re.sub(r"\[([^\]]+)\]\(#([^)]+)\)", link_replacer, text)
 
     link_targets: set[str] = set()
-    for m in re.finditer(r'\[[^\]]*\]\(#([^)]+)\)', text):
+    for m in re.finditer(r"\[[^\]]*\]\(#([^)]+)\)", text):
         link_targets.add(m.group(1))
 
     added_clean_ids: set[str] = set()
@@ -86,7 +79,7 @@ def sanitize_markdown_links(text: str) -> str:
         if clean_id == orig_id:
             return m.group(0)
         if clean_id in added_clean_ids:
-            return ''
+            return ""
         added_clean_ids.add(clean_id)
         return f'<a id="{clean_id}"></a>'
 
@@ -104,7 +97,7 @@ def schema2markdown(
     parser = jsonschema2md.Parser()
 
     processed = _compact_examples(schema) if compact else schema
-    md = ''.join(parser.parse_schema(processed, fail_on_error_in_defs=False))
+    md = "".join(parser.parse_schema(processed, fail_on_error_in_defs=False))
     if sanitize_links:
         md = sanitize_markdown_links(md)
     return md
@@ -114,5 +107,5 @@ def main():
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

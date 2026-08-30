@@ -19,17 +19,16 @@ import multiprocessing as mp
 import threading
 import time
 import traceback
-from typing import Callable, Any
+from typing import Any, Callable
 
-
-from seetapsych_lib.runtime.parallel.executor import *
-
+from seetapsych_lib.runtime.parallel.executor import Executor, ParallelExecutor
 
 # -----------------------------------------------------------------------------
 # Test executors
 # -----------------------------------------------------------------------------
 # These classes must be defined at module top-level so they can be pickled by
 # multiprocessing when the start method is spawn.
+
 
 class AddExecutor(Executor):
     def __init__(self, delta: int):
@@ -85,20 +84,20 @@ class RunFailedExecutor(Executor):
 # Helpers
 # -----------------------------------------------------------------------------
 
+
 def get_processes(runner: ParallelExecutor) -> dict[int, mp.Process]:
     """Access private process dict for test-only lifecycle assertions."""
-    return getattr(runner, "_ParallelExecutor__processes")
+    return runner._ParallelExecutor__processes
 
 
-def process_snapshot(runner: ParallelExecutor) -> dict[int, tuple[str, int | None, bool, int | None]]:
+def process_snapshot(
+    runner: ParallelExecutor,
+) -> dict[int, tuple[str, int | None, bool, int | None]]:
     """Return {node_id: (name, pid, alive, exitcode)} for easier debugging."""
-    return {
-        node_id: (p.name, p.pid, p.is_alive(), p.exitcode)
-        for node_id, p in get_processes(runner).items()
-    }
+    return {node_id: (p.name, p.pid, p.is_alive(), p.exitcode) for node_id, p in get_processes(runner).items()}
 
 
-def assert_all_processes_stopped(runner: ParallelExecutor, case_name: str) -> None:
+def assert_all_processes_stopped(runner: ParallelExecutor, case_name: str):
     """Fail the test if any child process is still alive after dispose()."""
     alive = []
     for node_id, process in get_processes(runner).items():
@@ -109,7 +108,7 @@ def assert_all_processes_stopped(runner: ParallelExecutor, case_name: str) -> No
         raise AssertionError(f"{case_name}: processes still alive after dispose: {alive}")
 
 
-def dispose_and_check(runner: ParallelExecutor, case_name: str, wait_seconds: float = 0.3) -> None:
+def dispose_and_check(runner: ParallelExecutor, case_name: str, wait_seconds: float = 0.3):
     """Always release resources and verify process lifecycle."""
     runner.dispose(wait_seconds=wait_seconds)
     assert_all_processes_stopped(runner, case_name)
@@ -132,7 +131,7 @@ def call_with_timeout(fn: Callable[[], Any], timeout: float) -> tuple[bool, Any,
     result: list[Any] = []
     errors: list[BaseException] = []
 
-    def wrapper() -> None:
+    def wrapper():
         try:
             result.append(fn())
         except BaseException as exc:
@@ -151,7 +150,8 @@ def call_with_timeout(fn: Callable[[], Any], timeout: float) -> tuple[bool, Any,
 # Cases
 # -----------------------------------------------------------------------------
 
-def case_multi_node_graph() -> None:
+
+def case_multi_node_graph():
     """
     Graph topology:
 
@@ -190,7 +190,7 @@ def case_multi_node_graph() -> None:
         dispose_and_check(runner, "case_multi_node_graph")
 
 
-def case_init_failure() -> None:
+def case_init_failure():
     runner = ParallelExecutor()
     try:
         runner.register("init_failed", InitFailedExecutor())
@@ -207,7 +207,7 @@ def case_init_failure() -> None:
         dispose_and_check(runner, "case_init_failure")
 
 
-def case_run_failure() -> None:
+def case_run_failure():
     runner = ParallelExecutor()
     try:
         runner.register("run_failed", RunFailedExecutor())
@@ -226,10 +226,7 @@ def case_run_failure() -> None:
                 raise AssertionError(f"expected timeout result [], got {result!r}")
 
         time.sleep(0.5)
-        exitcodes = {
-            node_id: process.exitcode
-            for node_id, process in get_processes(runner).items()
-        }
+        exitcodes = {node_id: process.exitcode for node_id, process in get_processes(runner).items()}
         if 2 not in exitcodes.values():
             raise AssertionError(f"expected one process exitcode=2, got {exitcodes}")
     finally:
@@ -239,6 +236,7 @@ def case_run_failure() -> None:
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
+
 
 def main() -> int:
     # spawn is closer to Windows behavior and catches pickling/import problems.

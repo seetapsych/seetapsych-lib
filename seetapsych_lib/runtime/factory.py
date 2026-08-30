@@ -4,25 +4,31 @@ import os.path
 from typing import IO, Iterable
 
 from seetapsych_lib import schema
+from seetapsych_lib.runtime.module import (
+    LoadedModule,
+    load_builtin_modules,
+    load_default_modules,
+    load_dir_modules,
+    load_example_modules,
+    load_local_module,
+    load_url_module,
+)
 from seetapsych_lib.utils.logger import logger
 from seetapsych_lib.utils.pencilbox import unique_list
-from seetapsych_lib.runtime.module import (
-    LoadedModule, load_builtin_modules, load_default_modules,
-    load_example_modules,
-    load_dir_modules, load_local_module, load_url_module
-)
 
 __all__ = [
-    'Factory',
+    "Factory",
 ]
+
 
 class Factory(object):
     def __init__(
-            self, *,
-            disable_builtin: bool=False,
-            disable_default: bool=False,
-            enable_example: bool=False,
-        ):
+        self,
+        *,
+        disable_builtin: bool = False,
+        disable_default: bool = False,
+        enable_example: bool = False,
+    ):
         self.__modules: list[LoadedModule] = []
 
         self.__module_uid_map: dict[schema.Uid, schema.Module] = {}
@@ -43,10 +49,11 @@ class Factory(object):
         if enable_example:
             self.load_example_modules()
 
-
     def append(self, module: LoadedModule):
-        # Even if there are duplicate UIDs, in most cases, factory operations will still work without issues.
-        # TODO: We still need to handle this situation or provide a prompt to the user, in the future.
+        # Even if there are duplicate UIDs, in most cases, factory operations will
+        # still work without issues.
+        # TODO: We still need to handle this situation or provide a prompt
+        # to the user, in the future.
         self.__modules.append(module)
 
         self.__module_uid_map[module.module.module.uid] = module.module
@@ -76,8 +83,9 @@ class Factory(object):
         modules = load_default_modules()
         if not modules:
             logger.warning(
-                'No default modules loaded. '
-                'Tip: You can use "seetapsych-manager download" to install the default built-in module configs.'
+                "No default modules loaded. "
+                'Tip: You can use "seetapsych-manager download" '
+                "to install the default built-in module configs."
             )
         self.extend(modules)
 
@@ -93,7 +101,7 @@ class Factory(object):
 
         for p in values:
             ext = os.path.splitext(p)[1][1:]
-            with open(p, 'r', encoding='utf-8') as f:
+            with open(p, "r", encoding="utf-8") as f:
                 self.load_local_module(f, ext)
 
     def load_url_modules(self, url: str | Iterable[str], /, *urls: str):
@@ -105,7 +113,7 @@ class Factory(object):
             if module is not None:
                 self.append(module)
 
-    def load_local_module(self, f: str | bytes | IO[str] | IO[bytes], extension: str = None):
+    def load_local_module(self, f: str | bytes | IO[str] | IO[bytes], extension: str | None = None):
         module = load_local_module(f, extension)
         if module is not None:
             self.append(module)
@@ -145,9 +153,10 @@ class Factory(object):
     def query_parameter(self, uid: schema.Uid, name: str) -> schema.Parameter | None:
         return self.__parameter_map.get((uid, name), None)
 
+
 def test():
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test()

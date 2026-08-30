@@ -8,12 +8,17 @@ from .instance import Instance
 from .model import UsageModel
 
 __all__ = [
-    'Package',
+    "Package",
 ]
 
 
 class Package(ABC):
     @abstractmethod
-    def create(self, *, models: list[UsageModel], parameters: dict[str, Any], device: Device | None,
-               **kwargs) -> Instance:
-        ...
+    def create(
+        self,
+        *,
+        models: list[UsageModel],
+        parameters: dict[str, Any],
+        device: Device | None,
+        **kwargs: Any,
+    ) -> Instance: ...

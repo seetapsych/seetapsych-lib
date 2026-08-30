@@ -6,8 +6,8 @@ import json
 from typing import Any
 
 __all__ = [
-    'sanitize_json',
-    'dumps_sanitized',
+    "sanitize_json",
+    "dumps_sanitized",
 ]
 
 _JSON_PRIMITIVE = (type(None), bool, int, float, str)
@@ -21,8 +21,8 @@ def _format_type_name(value: Any) -> str:
     cls = type(value)
     module = cls.__module__
     name = cls.__qualname__
-    if module and module != 'builtins':
-        return f'{module}.{name}'
+    if module and module != "builtins":
+        return f"{module}.{name}"
     return name
 
 
@@ -30,11 +30,12 @@ def _format_non_serializable(value: Any) -> str:
     base = _format_type_name(value)
     try:
         import numpy
+
         if isinstance(value, numpy.ndarray):
-            base = f'{base}(shape={list(value.shape)}, dtype={value.dtype})'
+            base = f"{base}(shape={list(value.shape)}, dtype={value.dtype})"
     except Exception:
         pass
-    return f'{base} (members only accessible via code)'
+    return f"{base} (members only accessible via code)"
 
 
 def sanitize_json(value: Any) -> Any:
@@ -53,6 +54,7 @@ def sanitize_json(value: Any) -> Any:
         return [sanitize_json(v) for v in value]
     try:
         import numpy
+
         if isinstance(value, numpy.generic):
             return value.item()
         if isinstance(value, numpy.ndarray):

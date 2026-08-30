@@ -4,31 +4,33 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 __all__ = [
-    'Instance',
+    "Instance",
 ]
 
 
 class Instance(ABC):
     @abstractmethod
-    def inference(self, *, data: dict[str, Any], report: dict[str, Any], **kwargs) -> dict[str, Any]:
+    def inference(self, *, data: dict[str, Any], report: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
         """
         Call a frame of data.
         :param data: dict[str, numpy.ndarray]
         :param report: dict[str, Any]
         :return:
-        The report has some predefined system parameters, such as "time" which represents a Unix timestamp.
+        The report has some predefined system parameters, such as "time" which
+        represents a Unix timestamp.
         """
         ...
 
-    def reset(self):
+    def reset(self):  # noqa: B027
         """
         Reset the status after completing a segment of data processing,
           to proceed with the next segment of data processing.
         """
         pass
 
-    def dispose(self):
+    def dispose(self):  # noqa: B027
         """
-        It will be called when the instance is confirmed to be no longer in use, for timely resource release.
+        It will be called when the instance is confirmed to be no longer in
+        use, for timely resource release.
         """
         pass

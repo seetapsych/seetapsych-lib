@@ -1,7 +1,6 @@
 import threading
 import time
 import traceback
-
 from typing import Any, Callable, Generic, TypeVar
 
 __all__ = [
@@ -44,9 +43,9 @@ class Future(Generic[T]):
     """
 
     def __init__(
-            self,
-            *,
-            cascade: Callable[[Any], T] | None = None,
+        self,
+        *,
+        cascade: Callable[[Any], T] | None = None,
     ):
         self.__event = threading.Event()
         self.__lock = threading.Lock()
@@ -70,9 +69,7 @@ class Future(Generic[T]):
                 Future has not finished yet.
         """
         if not self.done():
-            raise RuntimeError(
-                "Future is not finished. Call wait() or get() first."
-            )
+            raise RuntimeError("Future is not finished. Call wait() or get() first.")
         return self.__payload  # type: ignore
 
     @property
@@ -85,9 +82,7 @@ class Future(Generic[T]):
                 Future has not finished yet.
         """
         if not self.done():
-            raise RuntimeError(
-                "Future is not finished. Call wait() or get() first."
-            )
+            raise RuntimeError("Future is not finished. Call wait() or get() first.")
         return self.__error
 
     @property
@@ -201,10 +196,7 @@ class Future(Generic[T]):
                 try:
                     payload = self.__cascade(payload)
                 except Exception:
-                    self.__error = RuntimeError(
-                        "Cascade conversion failed.\n"
-                        + traceback.format_exc()
-                    )
+                    self.__error = RuntimeError("Cascade conversion failed.\n" + traceback.format_exc())
                     self.__time_end = time.time()
                     self.__event.set()
                     return True

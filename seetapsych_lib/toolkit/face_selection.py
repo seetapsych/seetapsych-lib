@@ -1,12 +1,37 @@
 # -*- coding: utf-8 -*-
 
 import copy
-from typing import List, Tuple, TypedDict
+from typing import TypedDict, cast
 
 
 class Detection(TypedDict):
-    xyxy: List[float]
+    """Rectangular face detection result with confidence score.
+
+    Matches ``seetapsych_attributes.types.BBox`` contract (xyxy + score).
+    Exposed publicly for type annotations by callers such as
+    ``toolkit.packages.face_selection``.
+    """
+
+    # [x1, y1, x2, y2] -- pixel-coordinate bounding box
+    xyxy: list[float]
+    # detection confidence in [0, 1]
     score: float
+
+
+class _WorkingDetection(Detection, total=False):
+    """Internal-only extension of Detection with transient scratch fields.
+
+    Fields declared here are written *only* on deep-copied local lists
+    inside ``max_select`` / ``max_tracking`` and must never leak into the
+    original ``Detection`` instances supplied by callers. Using
+    ``total=False`` makes every declared field ``NotRequired``, matching
+    the reality that each helper sets only a subset of these during
+    processing.
+    """
+
+    _area: float
+    _index: int
+    _iou: float
 
 
 def calculate_iou(det1: Detection, det2: Detection) -> float:
@@ -42,7 +67,7 @@ def calculate_iou(det1: Detection, det2: Detection) -> float:
     if union_area <= 0.0:
         return 0.0
 
-    return inter_area / union_area
+    return cast(float, inter_area / union_area)
 
 
 def max_select(detections: list[Detection]) -> int:
@@ -51,18 +76,18 @@ def max_select(detections: list[Detection]) -> int:
 
     if len(detections) == 1:
         return 0
-    
-    detections = copy.deepcopy(detections)
-    for i, det in enumerate(detections):
-        x1, y1, x2, y2 = det['xyxy']
-        det['$area'] = (x2 - x1) * (y2 - y1)
-        det['$index'] = i
 
-    detections.sort(key=lambda x: x['$area'], reverse=True)
-    return detections[0]['$index']
+    working: list[_WorkingDetection] = cast(list[_WorkingDetection], copy.deepcopy(detections))
+    for i, det in enumerate(working):
+        x1, y1, x2, y2 = det["xyxy"]
+        det["_area"] = (x2 - x1) * (y2 - y1)
+        det["_index"] = i
+
+    working.sort(key=lambda x: x["_area"], reverse=True)
+    return int(working[0]["_index"])
 
 
-def max_tracking(detections: list[Detection], pre_selection: Detection | None = None) -> Tuple[int, bool]:
+def max_tracking(detections: list[Detection], pre_selection: Detection | None = None) -> tuple[int, bool]:
     """
     :param detections: current detections
     :param pre_selection: previous detection
@@ -74,41 +99,41 @@ def max_tracking(detections: list[Detection], pre_selection: Detection | None = 
     if not detections:
         return -1, False
 
-    detections = copy.deepcopy(detections)
-    for i, det in enumerate(detections):
-        x1, y1, x2, y2 = det['xyxy']
-        det['$area'] = (x2 - x1) * (y2 - y1)
-        det['$index'] = i
+    working: list[_WorkingDetection] = cast(list[_WorkingDetection], copy.deepcopy(detections))
+    for i, det in enumerate(working):
+        x1, y1, x2, y2 = det["xyxy"]
+        det["_area"] = (x2 - x1) * (y2 - y1)
+        det["_index"] = i
 
-    detections.sort(key=lambda x: x['$area'], reverse=True)
+    working.sort(key=lambda x: x["_area"], reverse=True)
 
     if pre_selection is None:
         # select max detection target
-        return detections[0]['$index'], True
+        return int(working[0]["_index"]), True
 
-    max_area = detections[0]['$area']
+    max_area = working[0]["_area"]
     # selected closed target
-    for det in detections:
-        det['$iou'] = calculate_iou(det, pre_selection)
+    for det in working:
+        det["_iou"] = calculate_iou(det, pre_selection)
 
-    iou_detections = copy.deepcopy(detections)
-    iou_detections = [det for det in iou_detections if det['$iou'] > iou_threshold]
-    iou_detections.sort(key=lambda x: x['$iou'], reverse=True)
+    iou_detections: list[_WorkingDetection] = cast(list[_WorkingDetection], copy.deepcopy(working))
+    iou_detections = [det for det in iou_detections if det["_iou"] > iou_threshold]
+    iou_detections.sort(key=lambda x: x["_iou"], reverse=True)
 
     if not iou_detections:
         # select max target while no detection in near area
-        return detections[0]['$index'], True
+        return int(working[0]["_index"]), True
 
-    if iou_detections[0]['$area'] / max_area < switch_ratio:
+    if iou_detections[0]["_area"] / max_area < switch_ratio:
         # the other max detection is greater the closest detection as switch ratio description
-        return detections[0]['$index'], True
+        return int(working[0]["_index"]), True
 
-    return iou_detections[0]['$index'], False
+    return int(iou_detections[0]["_index"]), False
 
 
 def main():
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
