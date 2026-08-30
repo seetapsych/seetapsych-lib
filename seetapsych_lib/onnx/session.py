@@ -28,7 +28,7 @@ class OnnxSession(object):
         if "CUDAExecutionProvider" in available_providers:
             if device_ is None:
                 providers: list[Any] = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            elif not device_.type == "cuda":
+            elif device_.type != "cuda":
                 providers = ["CPUExecutionProvider"]
             else:
                 device_id = device_.index

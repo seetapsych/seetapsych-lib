@@ -91,6 +91,26 @@ def checksum(file_path: str, expected_hash: str, algorithm: Literal["md5", "sha2
     return expected_hash == actually_hash
 
 
+def _validate_checksum(
+    file_path: str,
+    *,
+    md5: str | None,
+    sha256: str | None,
+    raise_exception: bool = False,
+) -> bool:
+    if md5 and not checksum(file_path, md5, algorithm="md5"):
+        if raise_exception:
+            raise RuntimeError(f"Failed to checksum of {file_path} md5={md5}")
+        return False
+
+    if sha256 and not checksum(file_path, sha256, algorithm="sha256"):
+        if raise_exception:
+            raise RuntimeError(f"Failed to checksum of {file_path} sha256={sha256}")
+        return False
+
+    return True
+
+
 def download_file(
     url: str,
     output: str | None = None,
@@ -167,23 +187,8 @@ def download_http_file(
     current_output_temp: str | None = None
     current_output_name: str | None = "unknown"
 
-    def validate_file(validate_path: str, raise_exception: bool = False) -> bool:
-        if md5 and not checksum(validate_path, md5, algorithm="md5"):
-            if raise_exception:
-                raise RuntimeError(f"Failed to checksum of {validate_path} md5={md5}")
-            else:
-                return False
-
-        if sha256 and not checksum(validate_path, sha256, algorithm="sha256"):
-            if raise_exception:
-                raise RuntimeError(f"Failed to checksum of {validate_path} sha256={sha256}")
-            else:
-                return False
-
-        return True
-
     if output and os.path.isfile(output) and not overwrite:
-        if validate_file(output, raise_exception=False):
+        if _validate_checksum(output, md5=md5, sha256=sha256, raise_exception=False):
             return output
         else:
             logger.warning(f"File {os.path.basename(output)} already exists, but checksum failed. Redownloading...")
@@ -199,7 +204,7 @@ def download_http_file(
                 if os.path.exists(current_output_path):
                     if overwrite:
                         os.remove(current_output_path)
-                    elif validate_file(current_output_path, raise_exception=False):
+                    elif _validate_checksum(current_output_path, md5=md5, sha256=sha256, raise_exception=False):
                         return current_output_path
                     else:
                         logger.warning(
@@ -235,16 +240,18 @@ def download_http_file(
                 ) from e
 
     # checksum
-    assert current_output_temp is not None
+    if current_output_temp is None:
+        raise RuntimeError(f"Failed to download {current_output_name} from {url}: temp path not initialized")
     try:
-        validate_file(current_output_temp, raise_exception=True)
+        _validate_checksum(current_output_temp, md5=md5, sha256=sha256, raise_exception=True)
     except RuntimeError:
         if os.path.exists(current_output_temp):
             os.remove(current_output_temp)
         raise
 
     # move temp to finally output file
-    assert current_output_path is not None
+    if current_output_path is None:
+        raise RuntimeError(f"Failed to download {current_output_name} from {url}: output path not initialized")
     if current_output_path != current_output_temp:
         dir_name = os.path.dirname(current_output_path)
         if dir_name:
@@ -345,22 +352,9 @@ def download_ftp_file(
     current_output_temp: str | None = None
     current_output_name: str | None = filename
 
-    def validate_file(validate_path: str, raise_exception: bool = False) -> bool:
-        if md5 and not checksum(validate_path, md5, algorithm="md5"):
-            if raise_exception:
-                raise RuntimeError(f"Failed to checksum of {validate_path} md5={md5}")
-            return False
-
-        if sha256 and not checksum(validate_path, sha256, algorithm="sha256"):
-            if raise_exception:
-                raise RuntimeError(f"Failed to checksum of {validate_path} sha256={sha256}")
-            return False
-
-        return True
-
     # Check existing output
     if output and os.path.isfile(output) and not overwrite:
-        if validate_file(output, raise_exception=False):
+        if _validate_checksum(output, md5=md5, sha256=sha256, raise_exception=False):
             return output
         else:
             logger.warning(f"File {os.path.basename(output)} already exists, but checksum failed. Redownloading...")
@@ -368,7 +362,8 @@ def download_ftp_file(
     for attempt in range(max_retries):
         ftp: FTP | None = None
         try:
-            assert host is not None
+            if host is None:
+                raise RuntimeError(f"Invalid FTP URL {url}: missing hostname")
             ftp = FTP()
             ftp.connect(host, port, timeout=timeout_seconds)
             ftp.login(username, password)
@@ -387,7 +382,7 @@ def download_ftp_file(
             if os.path.exists(current_output_path):
                 if overwrite:
                     os.remove(current_output_path)
-                elif validate_file(current_output_path, raise_exception=False):
+                elif _validate_checksum(current_output_path, md5=md5, sha256=sha256, raise_exception=False):
                     return current_output_path
                 else:
                     logger.warning(f"File {current_output_name} already exists, but checksum failed. Redownloading...")
@@ -428,16 +423,18 @@ def download_ftp_file(
                     pass
 
     # Validate checksum
-    assert current_output_temp is not None
+    if current_output_temp is None:
+        raise RuntimeError(f"Failed to download {current_output_name} from {url}: temp path not initialized")
     try:
-        validate_file(current_output_temp, raise_exception=True)
+        _validate_checksum(current_output_temp, md5=md5, sha256=sha256, raise_exception=True)
     except RuntimeError:
         if os.path.exists(current_output_temp):
             os.remove(current_output_temp)
         raise
 
     # Move to final path
-    assert current_output_path is not None
+    if current_output_path is None:
+        raise RuntimeError(f"Failed to download {current_output_name} from {url}: output path not initialized")
     if current_output_path != current_output_temp:
         dir_name = os.path.dirname(current_output_path)
         if dir_name:

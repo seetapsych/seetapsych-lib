@@ -230,8 +230,7 @@ def example() -> str:
 
 
 def parse(obj: dict[str, Any]) -> Module:
-    Module.model_validate(obj)
-    return Module(**obj)
+    return Module.model_validate(obj)
 
 
 def test():

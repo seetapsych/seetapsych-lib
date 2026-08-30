@@ -122,7 +122,8 @@ class CloudModel(api.UsageModel):
         return self.__metadata
 
     def __marker_path(self) -> str:
-        assert self.__cache_dir is not None
+        if self.__cache_dir is None:
+            raise RuntimeError("cache_dir must be provided for cloud models")
         return os.path.join(self.__cache_dir, ".seetapsych_cloud.json")
 
     def __read_marker(self) -> dict[str, Any] | None:
@@ -150,7 +151,8 @@ class CloudModel(api.UsageModel):
         return True
 
     def __downloaded_dir_from_marker(self, marker: dict[str, Any]) -> str | None:
-        assert self.__cache_dir is not None
+        if self.__cache_dir is None:
+            raise RuntimeError("cache_dir must be provided for cloud models")
         path = marker.get("path")
         if not isinstance(path, str) or path == "":
             return None
@@ -327,7 +329,8 @@ class DownloadModel(api.UsageModel):
         return self.__metadata
 
     def exists(self) -> bool:
-        assert self.__cache_dir is not None
+        if self.__cache_dir is None:
+            return False
         cache_index = os.path.join(self.__cache_dir, self.__cfg.index)
         if not os.path.exists(cache_index):
             return False
@@ -343,7 +346,8 @@ class DownloadModel(api.UsageModel):
         return True
 
     def cache(self) -> str:
-        assert self.__cache_dir is not None
+        if self.__cache_dir is None:
+            raise RuntimeError("cache_dir must be provided for download models")
         cache_index = os.path.join(self.__cache_dir, self.__cfg.index)
         if os.path.exists(cache_index):
             return cache_index
@@ -363,9 +367,8 @@ class DownloadModel(api.UsageModel):
             # download to index file
             download_file(self.__cfg.url, cache_index, md5=self.__cfg.md5, sha256=self.__cfg.sha256)
 
-        assert os.path.exists(cache_index), RuntimeError(
-            f"Index was not found in download directory: {self.__cfg.index}"
-        )
+        if not os.path.exists(cache_index):
+            raise RuntimeError(f"Index was not found in download directory: {self.__cfg.index}")
         if self.__cfg.unpack:
             for rel_path in self.__cfg.contains or []:
                 rel_path = rel_path.strip()

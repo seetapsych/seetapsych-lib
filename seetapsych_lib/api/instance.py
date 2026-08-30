@@ -21,16 +21,16 @@ class Instance(ABC):
         """
         ...
 
-    def reset(self):  # noqa: B027
+    def reset(self):
         """
         Reset the status after completing a segment of data processing,
           to proceed with the next segment of data processing.
         """
-        pass
+        return None
 
-    def dispose(self):  # noqa: B027
+    def dispose(self):
         """
         It will be called when the instance is confirmed to be no longer in
         use, for timely resource release.
         """
-        pass
+        return None

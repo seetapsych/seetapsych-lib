@@ -132,7 +132,7 @@ class Pipeline:
         :param description:
         """
         if config is None:
-            config = PipelineConfig(**{})
+            config = PipelineConfig.model_construct()
 
         self.__config = config
         self.__factory = factory
@@ -250,19 +250,19 @@ class Pipeline:
         if parameter is None:
             return
 
-        pacakge_parameters = self.__config.parameters.get(package_uid, None)
-        if pacakge_parameters is None:
+        package_parameters = self.__config.parameters.get(package_uid, None)
+        if package_parameters is None:
             self.__config.parameters[package_uid] = [parameter.model_copy(deep=True)]
             return
 
         parameter_index: int | None = next(
-            (i for i, p in enumerate(pacakge_parameters) if p.name == parameter.name), None
+            (i for i, p in enumerate(package_parameters) if p.name == parameter.name), None
         )
         if parameter_index is None:
-            pacakge_parameters.append(parameter.model_copy(deep=True))
+            package_parameters.append(parameter.model_copy(deep=True))
             return
 
-        pacakge_parameters[parameter_index] = parameter.model_copy(deep=True)
+        package_parameters[parameter_index] = parameter.model_copy(deep=True)
 
     def add_packages(self, uid: str | Iterable[str], /, *uids: str):
         ids = [uid] if isinstance(uid, str) else list(uid)
@@ -637,8 +637,8 @@ class Pipeline:
         if self.__factory is None:
             raise FactoryRequired
 
-        solved = SolvedConfig(**{})
-        unsolved = ProblemConfig(**{})
+        solved = SolvedConfig.model_construct()
+        unsolved = ProblemConfig.model_construct()
 
         handled_attributes: set[str] = set()
         while True:

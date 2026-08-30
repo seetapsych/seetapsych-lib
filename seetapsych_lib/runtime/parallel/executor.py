@@ -33,8 +33,9 @@ class Executor(ABC):
     @abstractmethod
     def run(self, *args: Any, **kwargs: Any) -> Any: ...
 
-    def action(self, data: Any):  # noqa: B027
-        pass
+    def action(self, data: Any):
+        """Optional hook for control-plane actions (e.g. reset state) during graph execution. Default no-op."""
+        del data
 
 
 @dataclass

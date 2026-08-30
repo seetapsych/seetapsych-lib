@@ -128,16 +128,22 @@ def parse_key(key: str) -> list[str | int]:
 
 def list2grid(contents: Iterable[Any], *, ignore_keys: list[str] | None = None) -> list[list[Any]]:
     grid: dict[str, list[Any]] = defaultdict(list)
+    rows: list[Any] = list(contents)
+    n_rows = len(rows)
 
-    for i, content in enumerate(contents):
+    for i, content in enumerate(rows):
         for k, v in flatten(content, ignore_keys=ignore_keys):
             column = grid[k]
             if len(column) < i:
                 column.extend([None] * (i - len(column)))
             column.append(v)
 
+    for column in grid.values():
+        if len(column) < n_rows:
+            column.extend([None] * (n_rows - len(column)))
+
     header = list(grid.keys())
-    data = [list(row) for row in zip(*grid.values(), strict=False)]
+    data = [list(row) for row in zip(*grid.values(), strict=True)]
 
     return [header, *data]
 

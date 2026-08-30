@@ -3,7 +3,7 @@
 import copy
 import time
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from seetapsych_lib import api, schema
 from seetapsych_lib.runtime.actions import load_package
@@ -117,7 +117,7 @@ class PackageExecutor(Executor):
         self.__device = device
         self.__cache_dir = cache_dir
 
-        self.__instance: Optional[api.Instance] = None
+        self.__instance: api.Instance | None = None
 
     def __hash__(self) -> int:
         return id(self)
@@ -153,14 +153,16 @@ class PackageExecutor(Executor):
         self.__instance = instance
 
     def action(self, data: ExchangeAction):
-        assert self.__instance is not None
+        if self.__instance is None:
+            raise RuntimeError("PackageExecutor not initialized: call init() before action()")
 
         match data.action:
             case "reset":
                 self.__instance.reset()
 
     def run(self, *args: ExchangeData) -> ExchangeData:
-        assert self.__instance is not None
+        if self.__instance is None:
+            raise RuntimeError("PackageExecutor not initialized: call init() before run()")
 
         data = args[0].data
         report = copy.copy(args[0].report)
@@ -186,7 +188,7 @@ class ParallelRunner:
     ):
         self.__parallel_executor: ParallelExecutor | None = None
 
-        global_device: Optional[api.Device] = None
+        global_device: api.Device | None = None
         attribute_device_map: dict[str, api.Device] = {}
         device_pool: list[api.Device] = []
 
@@ -292,7 +294,8 @@ class ParallelRunner:
         data: dict[str, Any] | Any,
         timestamp: float | None = None,
     ) -> Future[dict[str, Any]]:
-        assert self.__parallel_executor is not None
+        if self.__parallel_executor is None:
+            raise RuntimeError("ParallelRunner not initialized")
 
         if not self.__graph:
             future_result: WritableFuture[dict[str, Any]] = WritableFuture()
@@ -341,7 +344,8 @@ class ParallelRunner:
         return self.run_async(data, timestamp).get(timeout=timeout)
 
     def reset(self):
-        assert self.__parallel_executor is not None
+        if self.__parallel_executor is None:
+            raise RuntimeError("ParallelRunner not initialized")
 
         self.__frame_tick = self.__start_frame_tick
 

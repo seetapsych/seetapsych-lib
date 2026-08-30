@@ -144,7 +144,7 @@ class Runner:
         }
 
         # inference each instance
-        for package, instance in zip(self.__pipeline.packages, self.__instances, strict=False):
+        for package, instance in zip(self.__pipeline.packages, self.__instances, strict=True):
             start_time_seconds = time.perf_counter()
             update = instance.inference(data=data, report=report)
             time_seconds = time.perf_counter() - start_time_seconds

@@ -40,8 +40,6 @@ def _get_locale_encoding() -> str:
 
 
 def _decode_stderr(raw: bytes) -> str:
-    if raw is None:
-        return ""
     for enc in (_get_locale_encoding(), "utf-8"):
         try:
             return raw.decode(encoding=enc, errors="replace")
@@ -251,18 +249,17 @@ def install_requirements(
         return
 
     cmd: list[str] = [*package_manager(), "install"] + applicable_reqs
-    trusted_host_: str | bool | None = trusted_host
     if index_url:
         cmd += ["--index-url", index_url]
-    if trusted_host_:
-        if isinstance(trusted_host_, bool):
+    if trusted_host:
+        if isinstance(trusted_host, bool):
             if index_url:
                 parsed = urllib.parse.urlparse(index_url)
                 hn = parsed.hostname
                 if hn:
                     cmd += ["--trusted-host", hn]
         else:
-            cmd += ["--trusted-host", trusted_host_]
+            cmd += ["--trusted-host", trusted_host]
 
     logger.info(f"Install requirements in subprocess:\n{' '.join(cmd)}")
 
@@ -303,14 +300,17 @@ def install_module_requirements(
     install_requirements(unsatisfied)
 
 
-def import_entry(entry: schema.Entry | None) -> tuple[Callable | None, str | None]:
+def _resolve_entry_callable(
+    entry: schema.Entry,
+) -> tuple[Callable[..., Any] | None, str | None]:
     """
-    :param entry:
-    :return: entry function and failed import package name if that's the reason
-    """
-    if entry is None:
-        return entry, None
+    Resolve an entry spec to its callable target.
 
+    Returns:
+        (callable, None): Import and lookup succeeded.
+        (None, str): Import failed; str is the missing package name if known.
+        (None, None): Method format invalid, attribute missing, or target not callable.
+    """
     method = entry.method
     if entry.package:
         method = ".".join([entry.package, method])
@@ -334,29 +334,33 @@ def import_entry(entry: schema.Entry | None) -> tuple[Callable | None, str | Non
     return func, None
 
 
+def import_entry(entry: schema.Entry | None) -> tuple[Callable | None, str | None]:
+    """
+    :param entry:
+    :return: entry function and failed import package name if that's the reason
+    """
+    if entry is None:
+        return entry, None
+
+    return _resolve_entry_callable(entry)
+
+
 def call_entry(entry: schema.Entry, optional_kwargs: dict[str, Any] | None = None) -> Any:
     method = entry.method
     if entry.package:
         method = ".".join([entry.package, method])
-    if "." not in method:
-        raise RuntimeError("Global function calls are not supported")
-    lib_name, func_name = method.rsplit(".", 1)
 
-    try:
-        lib = importlib.import_module(lib_name)
-    except ImportError as e:
-        logger.error(f"Can not import module {lib_name}: {e}")
-        raise
-
-    try:
-        func = getattr(lib, func_name)
-    except AttributeError as e:
-        msg = f"Can not find {func_name} in module {lib_name}"
-        logger.error(msg)
-        raise AttributeError(msg) from e
-
-    if not callable(func):
-        msg = f"{method} is not callable"
+    func, pname = _resolve_entry_callable(entry)
+    if func is None:
+        if "." not in method:
+            raise RuntimeError("Global function calls are not supported")
+        if pname is not None:
+            e = ImportError(f"Can not import module for {method}")
+            e.name = pname
+            logger.error(f"Can not import module for {method}: {pname}")
+            raise e
+        lib_name, _ = method.rsplit(".", 1)
+        msg = f"Can not find or call {method} in module {lib_name}"
         logger.error(msg)
         raise RuntimeError(msg)
 
