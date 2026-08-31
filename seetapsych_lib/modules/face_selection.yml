@@ -2,16 +2,16 @@ version: '1.0'
 module:
   uid: d8a05838-8c5e-43d4-b158-dae7da1c6753
   name: SelectFace
-  version: 0.0.1
-  description: 'Select target from multi detected faces.'
+  version: '1.0'
+  description: 'Select one target face from multi-face detection outputs for single-face downstream pipelines.'
   keywords:
     - Face
     - Selection
 packages:
   - uid: bb212f54-aace-438f-9cb7-f6519f4fef48
     name: SelectFace
-    description: Select one target face from multiple detections by max area or tracking stability
-    version: 0.0.1
+    description: Select one face from detections by max area or max-tracking with PID increments on target change
+    version: '1.0'
     usage_models: []
     inputs: []
     provides:
@@ -26,4 +26,6 @@ packages:
         type: selection
         value: MAX_TRACKING
         selection: [MAX_TRACKING, MAX]
+        text: Selection Mode
+        description: Strategy for selecting from multiple faces. MAX_TRACKING adds temporal stability and increments PID on target switch; MAX picks the largest face every frame.
     models: []

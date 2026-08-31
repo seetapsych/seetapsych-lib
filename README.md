@@ -186,6 +186,36 @@ if __name__ == "__main__":
     main()
 ```
 
+## Built-in Modules
+
+SeetaPsych Lib ships with a built-in module `SelectFace` for pipelines that need to reduce multi-face detection results down to a single tracked face before running downstream single-face algorithms.
+
+### Module Catalog
+
+| Module Config | Packages |
+| --- | --- |
+| [face_selection.yml](seetapsych_lib/modules/face_selection.yml) | SelectFace |
+
+### SelectFace
+
+> Module: SelectFace — Select one target face from multi-face detection outputs for single-face downstream pipelines.
+
+- **Module config**: [face_selection.yml](seetapsych_lib/modules/face_selection.yml)
+
+| Package Name | Provides Attributes | Requires Attributes |
+| --- | --- | --- |
+| SelectFace | `face/selection`, `face/detection` | `face/detection` |
+
+**Description**: Select one face from detections by max area or max-tracking with PID increments on target change. Use as a post-process between multi-face detectors (RetinaFace / MediaPipe / InsightFace) and any single-face consumer (emo / hr / dense_landmarks / arcface / gaze).
+
+**Parameters**:
+
+| Name | Type | Default | Description & Tuning |
+| --- | --- | --- | --- |
+| `selection_mode` | selection (`MAX_TRACKING`, `MAX`) | `MAX_TRACKING` | Strategy for selecting from multiple faces. `MAX_TRACKING` adds temporal stability and increments PID on target switch — recommended for video. `MAX` picks the largest face every frame — use for single static images. |
+
+**Models**: *(none — pure post-process)*
+
 ## Configuration
 
 ### Environment Variables
@@ -197,4 +227,3 @@ The following environment variables are supported:
 | SEETAPSYCH\_LOG\_LEVEL  | Change default log level. Could be `WARNING`, `INFO`, `DEBUG`, or an integer (e.g., `10`). |
 | SEETAPSYCH\_CACHE\_DIR  | Base directory for model cache. Models are cached under `<CACHE_DIR>/models`.              |
 | SEETAPSYCH\_CONFIG\_DIR | Base directory for config files. Config files are loaded from `<CONFIG_DIR>/configs`.      |
-

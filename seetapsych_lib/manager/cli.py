@@ -235,9 +235,15 @@ def download_configs(args: argparse.Namespace):
         logger.warning("No configs found in seetapsych_configs.")
         return
 
-    total = len(configs_list)
+    active_list = [c for c in configs_list if not c.get("disabled", False)]
+    disabled_count = len(configs_list) - len(active_list)
+    if disabled_count:
+        logger.info(f"Skipping {disabled_count} disabled config(s) (marked as disabled=true).")
+
+    total = len(active_list)
     success = 0
     skipped = 0
+    disabled = disabled_count
     failures: list[tuple[str, str]] = []
 
     config_root = default_config_dir()
@@ -246,7 +252,7 @@ def download_configs(args: argparse.Namespace):
     installed = list_installed_configs()
 
     with tempfile.TemporaryDirectory(prefix="seetapsych_dl_") as tmpdir:
-        for config in configs_list:
+        for config in active_list:
             tag = f"{config['name']} v{config['version']}"
             logger.info(f"Processing config: {tag}")
 
@@ -308,6 +314,8 @@ def download_configs(args: argparse.Namespace):
     lines.append(f"  Configs processed      : {total}")
     lines.append(f"  Succeeded              : {success}")
     lines.append(f"  Skipped (installed)    : {skipped}")
+    if disabled:
+        lines.append(f"  Skipped (disabled)     : {disabled}")
     lines.append(f"  Failed                 : {len(failures)}")
     if failures:
         lines.append("  Failures:")
