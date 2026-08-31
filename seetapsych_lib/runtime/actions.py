@@ -189,13 +189,13 @@ def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
     return unsatisfied
 
 
-def package_manager() -> list[str]:
+def package_manager() -> tuple[list[str], dict[str, str]]:
     # check uv
     uv_exe = find_uv()
     if uv_exe:
         uv_version = get_uv_version(uv_exe)
         logger.info(f"Using package manager: {uv_version}")
-        return [uv_exe, "pip"]
+        return [uv_exe, "pip"], {"UV_TORCH_BACKEND": "auto"}
 
     # check pip
     from importlib.util import find_spec
@@ -205,7 +205,7 @@ def package_manager() -> list[str]:
         ensurepip.bootstrap()
 
     logger.info(f"Using package manager: {get_pip_version()}")
-    return [sys.executable, "-m", "pip"]
+    return [sys.executable, "-m", "pip"], {}
 
 
 def _filter_applicable_requirements(requirements: list[str]) -> list[str]:
@@ -248,7 +248,8 @@ def install_requirements(
         logger.info(f"All requirements filtered out by environment markers, nothing to install: {requirements}")
         return
 
-    cmd: list[str] = [*package_manager(), "install"] + applicable_reqs
+    pm_cmd, pm_default_env = package_manager()
+    cmd: list[str] = [*pm_cmd, "install"] + applicable_reqs
     if index_url:
         cmd += ["--index-url", index_url]
     if trusted_host:
@@ -261,13 +262,26 @@ def install_requirements(
         else:
             cmd += ["--trusted-host", trusted_host]
 
-    logger.info(f"Install requirements in subprocess:\n{' '.join(cmd)}")
+    proc_env = os.environ.copy()
+    applied_env: list[str] = []
+    for key, value in pm_default_env.items():
+        existing = proc_env.get(key, "")
+        if not existing:
+            proc_env[key] = value
+            applied_env.append(f"{key}={value}")
+
+    for item in applied_env:
+        logger.info(f"Set environment variable for install: {item}")
+
+    env_prefix = (" ".join(applied_env) + " ") if applied_env else ""
+    logger.info(f"Install requirements in subprocess:\n{env_prefix}{' '.join(cmd)}")
 
     try:
         proc = subprocess.Popen(
             cmd,
             stdout=None,
             stderr=subprocess.PIPE,
+            env=proc_env,
         )
 
         stderr_buf = io.BytesIO()
