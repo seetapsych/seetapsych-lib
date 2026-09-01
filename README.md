@@ -4,8 +4,79 @@
 
 [![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
 
-SeetaPsych Lib is a Python library for face and body-based psychology analysis.
-It provides a modular Pipeline/Runner runtime and an optional Streamlit WebUI.
+SeetaPsych Lib is a Python-based computer vision toolkit for face-based psychological analysis, serving as the core library of the SeetaPsych project. It provides a modular Pipeline/Runner runtime that supports the composition and execution of custom algorithm modules, and ships with a quick-start WebUI for rapid onboarding and experimentation.
+
+## Overview
+
+As the foundational library of the SeetaPsych ecosystem, its position within the broader open-source project matrix is shown below.
+
+<div align="center">
+  <img src="assets/matrix.png" width="840"/>
+  <p><em>Open source project matrix</em></p>
+</div>
+
+The project provides solutions for the following primary application scenarios.
+
+<div align="center">
+  <img src="assets/usage.png" width="640"/>
+  <p><em>Target Use Cases</em></p>
+</div>
+
+The project uses configuration files to describe the available algorithms and the attributes that each algorithm can produce. An attribute represents the output of an algorithm or processing method.
+
+The following example shows how algorithms and attributes are described through configuration files (YML).
+
+<div align="center">
+  <img src="assets/attributes.png" width="840"/>
+  <p><em>Examples of configuration files (YML) and their corresponding attributes</em></p>
+</div>
+
+For example, `face-hub.yml` (under the Face module) provides two attributes — `face/detection` and `face/landmarks`. The `face/detection` attribute, shown below, contains the detected face bounding box (`xyxy`) and its confidence score:
+
+```json
+{
+  "face_detection": [
+    {
+      "xyxy": [
+        128.772,
+        158.999,
+        286.546,
+        369.401
+      ],
+      "score": 0.802
+    }
+  ]
+}
+```
+
+SeetaPsych attributes are defined and maintained in the [seetapsych-attributes](https://github.com/seetapsych/seetapsych-attributes) repository.  
+The shared configuration files (configs) live in the [seetapsych-configs](https://github.com/seetapsych/seetapsych-configs) repository.
+
+These YML configuration files are part of the framework's internal management mechanism and typically do not require manual editing by end users — they are fetched automatically when needed.
+
+Each attribute may depend on one or more algorithm modules for computation.
+
+**The key capability of the framework is dependency-driven automation:** users only need to specify which attributes they want to obtain. Based on the requested attributes and their declared dependencies, the framework automatically resolves all required algorithm modules and assembles them into an optimized computation graph.
+
+<div align="center">
+  <img src="assets/graph.png" width="640"/>
+  <p><em>Example of a computation graph constructed from requested attributes</em></p>
+</div>
+
+The computation graph is executed by a Runner, which processes images or videos and produces the requested attributes.
+
+By default, the Runner automatically detects the available hardware environment and prioritizes GPU acceleration for algorithm inference when a supported GPU is present.
+
+The example above walks through a concrete dependency chain aligned with the diagram:
+- First, the input image is processed by the Face module, which produces `face/landmarks` and `face/dense_landmarks`.
+- `face/landmarks` is then consumed by the Emo module, which outputs `face/expression`, `face/action_units`, and `face/dimensional_affect`.
+- `face/dense_landmarks` feeds into the Hertz module, which estimates the `face/heart_rate` attribute.
+
+This dependency-based organization enables multiple attributes to share and reuse intermediate results within a single computation graph, avoiding redundant computation.
+
+For further details, refer to the following repositories:
+- [seetapsych-attributes](https://github.com/seetapsych/seetapsych-attributes)
+- [seetapsych-configs](https://github.com/seetapsych/seetapsych-configs)
 
 ## Requirements
 
@@ -75,7 +146,7 @@ uv pip install 'seetapsych-lib[webui]' seetapsych-attributes seetapsych-configs
 #### Using pip
 
 ```sh
-pip install seetapsych-lib[webui] seetapsych-attributes seetapsych-configs
+pip install 'seetapsych-lib[webui]' seetapsych-attributes seetapsych-configs
 ```
 
 ## Install Default Configs
@@ -99,7 +170,10 @@ The default modules installed with `seetapsych-lib` are published and maintained
 To update the built-in modules to their latest versions, upgrade the configs package and re-download:
 
 ```sh
-uv pip compile --upgrade-package seetapsych-configs
+# Upgrade the installed seetapsych-configs package to the latest available version
+# For plain pip: pip install --upgrade seetapsych-configs
+uv pip install --upgrade seetapsych-configs
+# Re-download the latest module definitions
 seetapsych-manager download -f
 ```
 
@@ -185,36 +259,6 @@ def main():
 if __name__ == "__main__":
     main()
 ```
-
-## Built-in Modules
-
-SeetaPsych Lib ships with a built-in module `SelectFace` for pipelines that need to reduce multi-face detection results down to a single tracked face before running downstream single-face algorithms.
-
-### Module Catalog
-
-| Module Config | Packages |
-| --- | --- |
-| [face_selection.yml](seetapsych_lib/modules/face_selection.yml) | SelectFace |
-
-### SelectFace
-
-> Module: SelectFace — Select one target face from multi-face detection outputs for single-face downstream pipelines.
-
-- **Module config**: [face_selection.yml](seetapsych_lib/modules/face_selection.yml)
-
-| Package Name | Provides Attributes | Requires Attributes |
-| --- | --- | --- |
-| SelectFace | `face/selection`, `face/detection` | `face/detection` |
-
-**Description**: Select one face from detections by max area or max-tracking with PID increments on target change. Use as a post-process between multi-face detectors (RetinaFace / MediaPipe / InsightFace) and any single-face consumer (emo / hr / dense_landmarks / arcface / gaze).
-
-**Parameters**:
-
-| Name | Type | Default | Description & Tuning |
-| --- | --- | --- | --- |
-| `selection_mode` | selection (`MAX_TRACKING`, `MAX`) | `MAX_TRACKING` | Strategy for selecting from multiple faces. `MAX_TRACKING` adds temporal stability and increments PID on target switch — recommended for video. `MAX` picks the largest face every frame — use for single static images. |
-
-**Models**: *(none — pure post-process)*
 
 ## Configuration
 
