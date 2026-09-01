@@ -11,14 +11,14 @@ SeetaPsych Lib is a Python-based computer vision toolkit for face-based psycholo
 As the foundational library of the SeetaPsych ecosystem, its position within the broader open-source project matrix is shown below.
 
 <div align="center">
-  <img src="assets/matrix.png" width="840"/>
+  <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/matrix.png" width="840"/>
   <p><em>Open source project matrix</em></p>
 </div>
 
 The project provides solutions for the following primary application scenarios.
 
 <div align="center">
-  <img src="assets/usage.png" width="640"/>
+  <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/usage.png" width="640"/>
   <p><em>Target Use Cases</em></p>
 </div>
 
@@ -27,7 +27,7 @@ The project uses configuration files to describe the available algorithms and th
 The following example shows how algorithms and attributes are described through configuration files (YML).
 
 <div align="center">
-  <img src="assets/attributes.png" width="840"/>
+  <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/attributes.png" width="840"/>
   <p><em>Examples of configuration files (YML) and their corresponding attributes</em></p>
 </div>
 
@@ -59,7 +59,7 @@ Each attribute may depend on one or more algorithm modules for computation.
 **The key capability of the framework is dependency-driven automation:** users only need to specify which attributes they want to obtain. Based on the requested attributes and their declared dependencies, the framework automatically resolves all required algorithm modules and assembles them into an optimized computation graph.
 
 <div align="center">
-  <img src="assets/graph.png" width="640"/>
+  <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/graph.png" width="640"/>
   <p><em>Example of a computation graph constructed from requested attributes</em></p>
 </div>
 
