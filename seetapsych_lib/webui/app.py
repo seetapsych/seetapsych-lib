@@ -6,6 +6,7 @@ import os.path
 import tempfile
 import uuid
 from dataclasses import Field, dataclass, field, fields
+from functools import partial
 from types import TracebackType
 from typing import Any, Callable, Protocol, TypeVar, cast
 
@@ -180,6 +181,9 @@ def page_start():
             with st.container(border=True):
                 render_package_header(package)
                 render_package_models(pipeline, package)
+                if st.button("Delete", key=f"delete-package:{package.uid}", type="primary"):
+                    pipeline.remove_package(package.uid)
+                    st.rerun()
 
         problem = pipeline.problem()
         has_attribute_problem = bool(problem and (problem.missing_module_packages or problem.attributes))
@@ -195,7 +199,7 @@ def page_start():
         busy = st.empty()
 
         with st.container(horizontal=True):
-            no_solve = bool(event) or problem is None
+            no_solve = bool(event) or not has_attribute_problem
             if st.button("Solve", disabled=no_solve):
                 session_state.event = "solve"
                 st.rerun()
@@ -492,19 +496,101 @@ def parse_object(value: str) -> dict[str, Any] | None:
         return None
 
 
+def estimate_text_area_height(text: str, min_height: int = 200, max_height: int = 600, line_height: int = 20) -> int:
+    if not text:
+        return min_height
+    line_count = text.count("\n") + 1
+    estimated = max(min_height, min(max_height, line_count * line_height + 40))
+    return estimated
+
+
+def parameter_object_format(pipeline_ref: Pipeline, package_uid: str, param_name: str, text_key: str):
+    raw_value = st.session_state.get(text_key, "{}")
+    parsed = parse_object(raw_value)
+    if parsed is None:
+        return
+    pretty = format_object(parsed)
+    pipeline_ref.set_parameters(package_uid, {param_name: parsed})
+    # text_area is an input widget (writes_allowed=True at instantiation).
+    # Writing to session_state before rendering the widget ensures the next
+    # display uses the formatted value. No rerun needed (callbacks run pre-script).
+    setattr(st.session_state, text_key, pretty)
+
+
+def parameter_object_import_json(pipeline_ref: Pipeline, package_uid: str, param_name: str, text_key: str):
+    upload_key = "upload:json:" + text_key
+    uploaded_file = st.session_state.get(upload_key)
+    if uploaded_file is None:
+        return
+    try:
+        raw = read_uploaded_file_bytes(uploaded_file)
+        parsed = json.loads(raw.decode("utf-8"))
+        if isinstance(parsed, dict):
+            pretty = format_object(cast(dict[str, Any], parsed))
+            pipeline_ref.set_parameters(package_uid, {param_name: cast(dict[str, Any], parsed)})
+            setattr(st.session_state, text_key, pretty)
+        else:
+            st.error("JSON file must contain an object at top level.")
+    except Exception as e:
+        st.error(f"Failed to import JSON: {e}")
+
+
 def parameter_object(pipeline: Pipeline, package_uid: str, param: schema.Parameter):
     key = package_uid + ":" + param.name
+    upload_key = "upload:json:" + key
+    fmt_key = "fmt:" + key
+
     format_value = format_object(cast(dict[str, Any], param.value))
-    value = st.text_area(
-        key=key,
-        label=parameter_display_name(param),
-        value=format_value,
+    # Pre-instantiate session_state binding if absent.
+    if key not in st.session_state:
+        setattr(st.session_state, key, format_value)
+    # If pipeline value diverges from widget state (e.g. external update), sync into widget.
+    if st.session_state.get(key) != format_value and parse_object(st.session_state.get(key, "")) == parse_object(
+        format_value
+    ):
+        setattr(st.session_state, key, format_value)
+
+    display_value = st.session_state.get(key, format_value)
+    height = estimate_text_area_height(display_value)
+
+    on_click_fmt = partial(
+        parameter_object_format,
+        pipeline_ref=pipeline,
+        package_uid=package_uid,
+        param_name=param.name,
+        text_key=key,
     )
+    on_change_upload = partial(
+        parameter_object_import_json,
+        pipeline_ref=pipeline,
+        package_uid=package_uid,
+        param_name=param.name,
+        text_key=key,
+    )
+
+    with st.container():
+        value = st.text_area(
+            key=key,
+            label=parameter_display_name(param),
+            height=height,
+        )
+        st.markdown('<div class="param-object-row">', unsafe_allow_html=True)
+        with st.container(horizontal=True):
+            st.file_uploader(
+                "Import JSON",
+                type=["json"],
+                key=upload_key,
+                label_visibility="collapsed",
+                accept_multiple_files=False,
+                on_change=on_change_upload,
+            )
+            st.button("Format", key=fmt_key, on_click=on_click_fmt)
+        st.markdown("</div>", unsafe_allow_html=True)
+
     if value is not None and value != format_value:
         parse_value = parse_object(value)
         if parse_value is not None:
-            update = {param.name: parse_value}
-            pipeline.set_parameters(package_uid, update)
+            pipeline.set_parameters(package_uid, {param.name: parse_value})
         else:
             st.error(f"Invalid {parameter_display_name(param)}: {value}")
 
@@ -1346,6 +1432,22 @@ global_style = """
 .stButton button[kind="tertiary"] {
     min-height: unset;
     color: #409EFF;
+}
+
+.param-object-row [data-testid="stFileUploaderDropzone"] {
+    min-height: 2.4rem;
+    padding: 0.2rem 0.6rem;
+}
+.param-object-row [data-testid="stFileUploaderDropzoneInstructions"] small {
+    font-size: 0.7rem;
+}
+.param-object-row [data-testid="stFileUploaderFileInput"] button,
+.param-object-row [data-testid="stFileUploadDropzoneButton"],
+.param-object-row section[data-testid="stFileUploader"] button,
+.param-object-row .stButton button {
+    min-height: 2.2rem;
+    padding: 0 0.8rem;
+    font-size: 0.85rem;
 }
 """
 

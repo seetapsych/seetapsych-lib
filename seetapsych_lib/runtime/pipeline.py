@@ -362,6 +362,55 @@ class Pipeline:
         if self._remove_model(package_uid, model_uid):
             logger.debug(f"Remove model {package_uid} {model_uid}")
 
+    def _remove_package(self, package_uid: str) -> bool:
+        package_index: int | None = next(
+            (i for i, p in enumerate(self.__config.packages) if p.uid == package_uid), None
+        )
+        if package_index is None:
+            return False
+
+        del self.__config.packages[package_index]
+
+        if package_uid in self.__config.models:
+            del self.__config.models[package_uid]
+
+        if package_uid in self.__config.parameters:
+            del self.__config.parameters[package_uid]
+
+        return True
+
+    def _remove_module(self, module_uid: str) -> bool:
+        module_index: int | None = next((i for i, m in enumerate(self.__config.modules) if m.uid == module_uid), None)
+        if module_index is None:
+            return False
+
+        del self.__config.modules[module_index]
+        return True
+
+    def remove_package(self, uid: str | Iterable[str], /, *uids: str):
+        ids = [uid] if isinstance(uid, str) else list(uid)
+        ids = [*ids, *uids]
+        if self.__factory is None:
+            raise FactoryRequired
+
+        affected_module_uids: set[str] = set()
+
+        for package_uid in ids:
+            if factory_module := self.__factory.query_module_of_package(package_uid):
+                affected_module_uids.add(factory_module.module.uid)
+            if self._remove_package(package_uid):
+                logger.debug(f"Remove package {package_uid}")
+
+        remaining_module_uids: set[str] = set()
+        for package in self.__config.packages:
+            if factory_module := self.__factory.query_module_of_package(package.uid):
+                remaining_module_uids.add(factory_module.module.uid)
+
+        orphan_module_uids = affected_module_uids - remaining_module_uids
+        for module_uid in orphan_module_uids:
+            if self._remove_module(module_uid):
+                logger.debug(f"Remove module {module_uid}")
+
     def set_parameters(self, package_uid: schema.Uid, values: dict[str, Any]):
         if self.__factory is None:
             raise FactoryRequired
