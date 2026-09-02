@@ -8,27 +8,30 @@ SeetaPsych Lib is a Python-based computer vision toolkit for face-based psycholo
 
 ## Overview
 
-As the foundational library of the SeetaPsych ecosystem, its position within the broader open-source project matrix is shown below.
+As the foundational library of the SeetaPsych ecosystem, its position within the broader open-source project matrix is illustrated in [Fig. 1](#figure-matrix).
 
 <div align="center">
+  <a id="figure-matrix"></a>
   <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/matrix.png" width="840"/>
-  <p><em>Open source project matrix</em></p>
+  <p><em><strong>Figure 1.</strong> Open source project matrix</em></p>
 </div>
 
-The project provides solutions for the following primary application scenarios.
+The project provides solutions for the following primary application scenarios, as summarized in [Fig. 2](#figure-usage).
 
 <div align="center">
+  <a id="figure-usage"></a>
   <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/usage.png" width="640"/>
-  <p><em>Target Use Cases</em></p>
+  <p><em><strong>Figure 2.</strong> Target Use Cases</em></p>
 </div>
 
 The project uses configuration files to describe the available algorithms and the attributes that each algorithm can produce. An attribute represents the output of an algorithm or processing method.
 
-The following example shows how algorithms and attributes are described through configuration files (YML).
+[Fig. 3](#figure-attributes) illustrates how algorithms and attributes are described through configuration files (YML).
 
 <div align="center">
+  <a id="figure-attributes"></a>
   <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/attributes.png" width="840"/>
-  <p><em>Examples of configuration files (YML) and their corresponding attributes</em></p>
+  <p><em><strong>Figure 3.</strong> Examples of configuration files (YML) and their corresponding attributes</em></p>
 </div>
 
 For example, `face-hub.yml` (under the Face module) provides two attributes — `face/detection` and `face/landmarks`. The `face/detection` attribute, shown below, contains the detected face bounding box (`xyxy`) and its confidence score:
@@ -56,18 +59,17 @@ These YML configuration files are part of the framework's internal management me
 
 Each attribute may depend on one or more algorithm modules for computation.
 
-**The key capability of the framework is dependency-driven automation:** users only need to specify which attributes they want to obtain. Based on the requested attributes and their declared dependencies, the framework automatically resolves all required algorithm modules and assembles them into an optimized computation graph.
+**The key capability of the framework is dependency-driven automation:** users only need to specify which attributes they want to obtain. Based on the requested attributes and their declared dependencies, the framework automatically resolves all required algorithm modules and assembles them into an optimized computation graph. A concrete example is shown in [Fig. 4](#figure-graph).
 
 <div align="center">
+  <a id="figure-graph"></a>
   <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/graph.png" width="640"/>
-  <p><em>Example of a computation graph constructed from requested attributes</em></p>
+  <p><em><strong>Figure 4.</strong> Example of a computation graph constructed from requested attributes</em></p>
 </div>
 
-The computation graph is executed by a Runner, which processes images or videos and produces the requested attributes.
+The computation graph is executed by a Runner, which processes images or videos and produces the requested attributes. By default, the Runner automatically detects the available hardware environment and prioritizes GPU acceleration for algorithm inference when a supported GPU is present.
 
-By default, the Runner automatically detects the available hardware environment and prioritizes GPU acceleration for algorithm inference when a supported GPU is present.
-
-The example above walks through a concrete dependency chain aligned with the diagram:
+The example in [Fig. 4](#figure-graph) walks through a concrete dependency chain aligned with the diagram:
 - First, the input image is processed by the Face module, which produces `face/landmarks` and `face/dense_landmarks`.
 - `face/landmarks` is then consumed by the Emo module, which outputs `face/expression`, `face/action_units`, and `face/dimensional_affect`.
 - `face/dense_landmarks` feeds into the Hertz module, which estimates the `face/heart_rate` attribute.
