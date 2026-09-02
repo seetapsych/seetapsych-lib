@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import base64
 import json
 import os.path
 import tempfile
@@ -19,7 +20,7 @@ from streamlit.runtime.uploaded_file_manager import UploadedFile
 from seetapsych_lib import schema
 from seetapsych_lib.runtime import Factory, Pipeline, Runner
 from seetapsych_lib.runtime.export import list2csv
-from seetapsych_lib.runtime.pipeline import UnsatisfactionConfig
+from seetapsych_lib.runtime.pipeline import PipelineConfig, UnsatisfactionConfig
 from seetapsych_lib.utils.json import sanitize_json
 from seetapsych_lib.utils.logger import set_level as set_logger_level
 from seetapsych_lib.utils.markdown import schema2markdown
@@ -111,6 +112,613 @@ def fuzzy_match_model(model: schema.Model, pattern: str) -> bool:
     return any(match(s) for s in (model.name, model.description)) or any(match(s) for s in model.keywords)
 
 
+@st.dialog(title="Save Config")
+def dialog_save_config():
+    pipeline = session_state.pipeline
+    if pipeline is None:
+        st.error("No active pipeline to save.")
+        return
+
+    default_name = "New Config"
+    filename_key = "save_config_filename"
+    if filename_key not in st.session_state:
+        st.session_state[filename_key] = default_name
+
+    st.markdown('<span id="sp-save-cfg-marker" style="display:none"></span>', unsafe_allow_html=True)
+
+    try:
+        config_data = pipeline.config.model_dump(mode="json")
+        config_json = json.dumps(config_data, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"Failed to serialize config: {e}")
+        return
+
+    # Wrap input + submit in a form so pressing Enter in the filename field
+    # commits the new value before we read it (no blur/flush race).
+    with st.form("save_config_form", clear_on_submit=False, border=False):
+        filename_input_value = st.text_input(
+            "File name",
+            key=filename_key,
+        )
+        filename = filename_input_value if filename_input_value else default_name
+        if not filename.endswith(".json"):
+            filename += ".json"
+
+        submitted = st.form_submit_button(
+            "Download",
+            type="primary",
+        )
+
+    if submitted:
+        # Build a base64 data URL + trigger the download directly in the
+        # browser via a transient <a download> node, then close the dialog.
+        payload_bytes = config_json.encode("utf-8")
+        payload_b64 = base64.b64encode(payload_bytes).decode("ascii")
+        data_url = f"data:application/json;base64,{payload_b64}"
+        filename_js_literal = json.dumps(filename)
+        close_script = r"""
+            <script>
+            (function() {
+                function findDialogRoot() {
+                    var marker = document.getElementById("sp-save-cfg-marker");
+                    if (!marker) return null;
+                    if (marker.closest) {
+                        var closest =
+                            marker.closest('[data-testid="stDialog"]') ||
+                            marker.closest(".stDialog");
+                        if (closest) return closest;
+                    }
+                    var cur = marker;
+                    for (var i = 0; i < 20 && cur; i++) {
+                        if (
+                            cur.nodeType === 1 &&
+                            (cur.getAttribute("data-testid") === "stDialog" ||
+                                (cur.classList && cur.classList.contains("stDialog")))
+                        ) {
+                            return cur;
+                        }
+                        cur = cur.parentElement;
+                    }
+                    return null;
+                }
+
+                function findCloseButton(root) {
+                    if (!root) return null;
+                    var btn = root.querySelector('button[aria-label="Close"]');
+                    if (btn) return btn;
+                    var list = root.querySelectorAll("button");
+                    for (var i = 0; i < list.length; i++) {
+                        var label = (
+                            list[i].getAttribute("aria-label") || ""
+                        ).toLowerCase();
+                        if (label.indexOf("close") !== -1) return list[i];
+                    }
+                    return null;
+                }
+                try {
+                    var a = document.createElement("a");
+                    a.href = "DATA_URL_INJECT";
+                    a.download = FILENAME_JS_INJECT;
+                    a.rel = "noopener";
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(function() {
+                        try { document.body.removeChild(a); } catch (e) {}
+                    }, 0);
+                } catch (e) {}
+                setTimeout(function() {
+                    var close = findCloseButton(findDialogRoot());
+                    if (close) try { close.click(); } catch (e) {}
+                }, 300);
+            })();
+            </script>
+            """.replace("DATA_URL_INJECT", data_url).replace("FILENAME_JS_INJECT", filename_js_literal)
+        st.html(close_script, unsafe_allow_javascript=True)
+
+    # Autofocus the filename input on dialog open and select its default text.
+    st.html(
+        r"""
+        <script>
+        (function() {
+            var INTERVAL_MS = 100;
+            var MAX_ATTEMPTS = 50;
+
+            function findDialogRoot() {
+                var marker = document.getElementById("sp-save-cfg-marker");
+                if (!marker) return null;
+                if (marker.closest) {
+                    var closest =
+                        marker.closest('[data-testid="stDialog"]') ||
+                        marker.closest(".stDialog");
+                    if (closest) return closest;
+                }
+                var cur = marker;
+                for (var i = 0; i < 20 && cur; i++) {
+                    if (
+                        cur.nodeType === 1 &&
+                        (cur.getAttribute("data-testid") === "stDialog" ||
+                            (cur.classList && cur.classList.contains("stDialog")))
+                    ) {
+                        return cur;
+                    }
+                    cur = cur.parentElement;
+                }
+                return null;
+            }
+
+            function findTextInput(root) {
+                var w = root.querySelector('input[data-testid="stTextInputField"]');
+                if (w && w.type === "text") return w;
+                w = root.querySelector('[data-testid="stTextInput"] input');
+                if (w) return w;
+                var list = root.querySelectorAll("input");
+                for (var j = 0; j < list.length; j++) {
+                    if (!list[j].type || list[j].type === "text") return list[j];
+                }
+                return null;
+            }
+
+            function findFormSubmitButton(root) {
+                var w = root.querySelector(
+                    '[data-testid="stFormSubmitButton"] button[data-testid="stBaseButton-primary"]'
+                );
+                if (w) return w;
+                w = root.querySelector('[data-testid="stFormSubmitButton"] button');
+                if (w) return w;
+                var list = root.querySelectorAll("button");
+                for (var j = 0; j < list.length; j++) {
+                    var txt = (list[j].innerText || list[j].textContent || "").trim();
+                    if (txt === "Download") return list[j];
+                }
+                return null;
+            }
+
+            var attempt = 0;
+            var misses = 0;
+            var intervalId = setInterval(function() {
+                attempt += 1;
+                var root = findDialogRoot();
+                if (!root) {
+                    misses += 1;
+                    if (attempt >= MAX_ATTEMPTS || misses >= 5) {
+                        clearInterval(intervalId);
+                    }
+                    return;
+                }
+                misses = 0;
+                var input = findTextInput(root);
+                var submitBtn = findFormSubmitButton(root);
+
+                if (input && document.activeElement !== input) {
+                    try { input.focus({ preventScroll: false }); } catch (e) {}
+                    try {
+                        input.select();
+                        if (input.setSelectionRange) {
+                            input.setSelectionRange(0, (input.value || "").length);
+                        }
+                    } catch (e) {}
+                }
+
+                var focused = !!(input && document.activeElement === input);
+                var bound = !!submitBtn;
+                if ((focused && bound) || attempt >= MAX_ATTEMPTS) {
+                    clearInterval(intervalId);
+                }
+            }, INTERVAL_MS);
+        })();
+        </script>
+        """,
+        unsafe_allow_javascript=True,
+    )
+
+
+def _apply_loaded_config(config_json_str: str) -> bool:
+    factory = session_state.factory
+    if factory is None:
+        st.error("Factory is not initialized.")
+        return False
+
+    try:
+        config_dict = json.loads(config_json_str)
+        loaded_config = PipelineConfig.model_validate(config_dict)
+    except json.JSONDecodeError as e:
+        st.error(f"Invalid JSON: {e}")
+        return False
+    except Exception as e:
+        st.error(f"Invalid PipelineConfig: {e}")
+        return False
+
+    new_pipeline = Pipeline(factory, config=loaded_config)
+    session_state.pipeline = new_pipeline
+    session_state.runner = None
+    session_state.runner_signature = ""
+    session_state.reports = []
+    session_state.batch_grouped = []
+    session_state.batch_rows = []
+    session_state.export_json = ""
+    session_state.export_csv = ""
+    session_state.file = None
+    session_state.error = None
+    session_state.event = ""
+    session_state.package_uid = None
+    session_state.satisfied = False
+    session_state.unsatisfaction = None
+    return True
+
+
+@st.dialog(title="Load Config")
+def dialog_load_config():
+    load_key = "load_config_uploader"
+
+    uploaded = st.file_uploader(
+        "Select a config JSON file",
+        type=["json"],
+        key=load_key,
+        accept_multiple_files=False,
+    )
+
+    st.markdown(
+        '<span id="sp-load-cfg-marker" style="display:none"></span>',
+        unsafe_allow_html=True,
+    )
+
+    if uploaded is not None:
+        try:
+            raw_bytes = uploaded.read()
+            raw_text = raw_bytes.decode("utf-8")
+        except Exception as e:
+            st.error(f"Failed to read uploaded file: {e}")
+            return
+
+        try:
+            preview = json.loads(raw_text)
+            with st.expander("Config preview", expanded=False):
+                st.json(preview)
+        except Exception:
+            pass
+
+        if st.button("Load and Apply", type="primary", key="load_apply_btn"):
+            if _apply_loaded_config(raw_text):
+                st.success("Config loaded successfully.")
+                # Dismiss the dialog shortly after a successful apply, before
+                # the st.rerun() below rebuilds the page.
+                st.html(
+                    r"""
+                    <script>
+                    (function() {
+                        function findDialogRoot() {
+                            var marker = document.getElementById("sp-load-cfg-marker");
+                            if (!marker) return null;
+                            if (marker.closest) {
+                                var closest =
+                                    marker.closest('[data-testid="stDialog"]') ||
+                                    marker.closest(".stDialog");
+                                if (closest) return closest;
+                            }
+                            var cur = marker;
+                            for (var i = 0; i < 20 && cur; i++) {
+                                if (
+                                    cur.nodeType === 1 &&
+                                    (cur.getAttribute("data-testid") === "stDialog" ||
+                                        (cur.classList && cur.classList.contains("stDialog")))
+                                ) {
+                                    return cur;
+                                }
+                                cur = cur.parentElement;
+                            }
+                            return null;
+                        }
+                        function findCloseButton(root) {
+                            if (!root) return null;
+                            var btn = root.querySelector('button[aria-label="Close"]');
+                            if (btn) return btn;
+                            var list = root.querySelectorAll("button");
+                            for (var i = 0; i < list.length; i++) {
+                                var label = (list[i].getAttribute("aria-label") || "").toLowerCase();
+                                if (label.indexOf("close") !== -1) return list[i];
+                            }
+                            return null;
+                        }
+                        setTimeout(function() {
+                            var close = findCloseButton(findDialogRoot());
+                            if (close) try { close.click(); } catch (e) {}
+                        }, 100);
+                    })();
+                    </script>
+                    """,
+                    unsafe_allow_javascript=True,
+                )
+                st.rerun()
+            else:
+                st.error("Failed to apply config.")
+
+    # On success the dialog closes quickly, but also bind the close action to
+    # the Load and Apply button so a click always dismisses the dialog even if
+    # Python rerun timing shifts.
+    st.html(
+        r"""
+        <script>
+        (function() {
+            var INTERVAL_MS = 100;
+            var MAX_ATTEMPTS = 40;
+            var LISTENER_KEY = "__spLoadCfgCloseBound_v1";
+
+            function findDialogRoot() {
+                var marker = document.getElementById("sp-load-cfg-marker");
+                if (!marker) return null;
+                if (marker.closest) {
+                    var closest =
+                        marker.closest('[data-testid="stDialog"]') ||
+                        marker.closest(".stDialog");
+                    if (closest) return closest;
+                }
+                var cur = marker;
+                for (var i = 0; i < 20 && cur; i++) {
+                    if (
+                        cur.nodeType === 1 &&
+                        (cur.getAttribute("data-testid") === "stDialog" ||
+                            (cur.classList && cur.classList.contains("stDialog")))
+                    ) {
+                        return cur;
+                    }
+                    cur = cur.parentElement;
+                }
+                return null;
+            }
+
+            function findCloseButton(root) {
+                if (!root) return null;
+                var btn = root.querySelector('button[aria-label="Close"]');
+                if (btn) return btn;
+                var list = root.querySelectorAll("button");
+                for (var i = 0; i < list.length; i++) {
+                    var label = (list[i].getAttribute("aria-label") || "").toLowerCase();
+                    if (label.indexOf("close") !== -1) return list[i];
+                }
+                return null;
+            }
+
+            function findLoadApplyBtn(root) {
+                if (!root) return null;
+                var list = root.querySelectorAll("button");
+                for (var i = 0; i < list.length; i++) {
+                    var txt = (list[i].innerText || list[i].textContent || "").trim();
+                    if (txt === "Load and Apply") return list[i];
+                }
+                return null;
+            }
+
+            var attempt = 0;
+            var misses = 0;
+            var intervalId = setInterval(function() {
+                attempt += 1;
+                var root = findDialogRoot();
+                if (!root) {
+                    misses += 1;
+                    if (attempt >= MAX_ATTEMPTS || misses >= 5) {
+                        clearInterval(intervalId);
+                    }
+                    return;
+                }
+                misses = 0;
+                var btn = findLoadApplyBtn(root);
+                if (!btn) {
+                    if (attempt >= MAX_ATTEMPTS) clearInterval(intervalId);
+                    return;
+                }
+                if (!btn[LISTENER_KEY]) {
+                    btn[LISTENER_KEY] = true;
+                    btn.addEventListener("click", function() {
+                        setTimeout(function() {
+                            var close = findCloseButton(findDialogRoot());
+                            if (close) try { close.click(); } catch (e) {}
+                        }, 80);
+                    });
+                }
+                if (btn[LISTENER_KEY] || attempt >= MAX_ATTEMPTS) {
+                    clearInterval(intervalId);
+                }
+            }, INTERVAL_MS);
+        })();
+        </script>
+        """,
+        unsafe_allow_javascript=True,
+    )
+
+
+def render_save_config_button(key_suffix: str = "", *, disabled: bool = False):
+    key = f"btn_save_config_{session_state.page}{key_suffix}"
+    if st.button("Save Config", key=key, disabled=disabled):
+        st.session_state.pop("save_config_filename", None)
+        dialog_save_config()
+
+
+def render_load_config_button(key_suffix: str = "", *, disabled: bool = False):
+    key = f"btn_load_config_{session_state.page}{key_suffix}"
+    if st.button("Load Config", key=key, disabled=disabled):
+        dialog_load_config()
+
+
+def render_back_to_top():
+    # Streamlit renders the main page inside a nested layout, but not directly on
+    # window, so we enumerate common candidates and pick whichever one that
+    # actually has content overflow and a non-zero scrollTop. This covers the
+    # stMain / stMainBlockContainer / stApp variants as well as plain
+    # window/documentElement fallbacks.
+    st.html(
+        """
+        <div class="back-to-top-wrapper">
+            <button id="back-to-top-btn"
+                    type="button"
+                    title="Back to top"
+                    style="opacity:.5; pointer-events:none;
+                           transition:opacity .15s, background-color .15s;
+                           border:none; background:transparent; cursor:pointer;
+                           padding:8px; border-radius:50%;
+                           font-size:20px; line-height:1;">
+                &#8679;
+            </button>
+        </div>
+        """,
+    )
+    # Attach scroll listeners to the detected containers so the button is
+    # only interactive when the user has scrolled down, and scroll to top
+    # on click.
+    st.html(
+        r"""
+        <script>
+        (function() {
+            var btn = document.getElementById('back-to-top-btn');
+            if (!btn) return;
+
+            var THRESHOLD_PX = 60;
+            var btnEnabled = false;
+
+            function setEnabled(enabled) {
+                if (enabled === btnEnabled) return;
+                btnEnabled = enabled;
+                if (enabled) {
+                    btn.style.opacity = '1';
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.cursor = 'pointer';
+                } else {
+                    btn.style.opacity = '.5';
+                    btn.style.pointerEvents = 'none';
+                    btn.style.cursor = 'default';
+                }
+            }
+
+            function candidateList() {
+                var out = [];
+                out.push(window);
+                var selectors = [
+                    '[data-testid="stMainBlockContainer"]',
+                    '[data-testid="stAppViewBlockContainer"]',
+                    '[data-testid="stMain"]',
+                    'section.main',
+                    '.stApp',
+                    '[data-testid="stAppViewContainer"]',
+                    '#root',
+                ];
+                for (var i = 0; i < selectors.length; i++) {
+                    var list = document.querySelectorAll(selectors[i]);
+                    for (var j = 0; j < list.length; j++) out.push(list[j]);
+                }
+                // Fall back to documentElement/body when none of the wrapper
+                // elements actually scroll.
+                if (document.documentElement) out.push(document.documentElement);
+                if (document.body) out.push(document.body);
+                return out;
+            }
+
+            function isScrollable(el) {
+                if (el === window) {
+                    var doc = document.documentElement;
+                    return doc && doc.scrollHeight - doc.clientHeight > THRESHOLD_PX * 2;
+                }
+                if (!el || el.nodeType !== 1) return false;
+                var style;
+                try { style = window.getComputedStyle ? getComputedStyle(el) : null; }
+                catch (e) { style = null; }
+                var overflowY = style ? (style.overflowY || el.style.overflowY || '') : '';
+                if (overflowY && overflowY !== 'visible' && overflowY !== 'hidden' && overflowY !== 'clip') {
+                    // Candidate with explicit scrollable overflow.
+                }
+                return el.scrollHeight - el.clientHeight > THRESHOLD_PX * 2;
+            }
+
+            function getScrollTop(el) {
+                if (el === window) {
+                    if (window.pageYOffset != null) return window.pageYOffset;
+                    return document.documentElement.scrollTop || 0;
+                }
+                return el.scrollTop || 0;
+            }
+
+            function setScrollTop(el, value) {
+                if (el === window) {
+                    try { window.scrollTo({ top: value, behavior: 'smooth' }); } catch (e) {
+                        try { window.scrollTo(0, value); } catch (e2) {}
+                    }
+                    return;
+                }
+                try {
+                    el.scrollTo({ top: value, behavior: 'smooth' });
+                } catch (e) {
+                    try { el.scrollTop = value; } catch (e2) {}
+                }
+            }
+
+            function findActiveScroller() {
+                var list = candidateList();
+                var best = null;
+                var bestTop = -1;
+                for (var i = 0; i < list.length; i++) {
+                    var el = list[i];
+                    if (!isScrollable(el)) continue;
+                    var top = getScrollTop(el);
+                    if (top > bestTop) {
+                        bestTop = top;
+                        best = el;
+                    }
+                }
+                if (!best) {
+                    var doc = document.documentElement;
+                    if (doc && doc.scrollHeight - doc.clientHeight > THRESHOLD_PX) return window;
+                }
+                return best;
+            }
+
+            function refresh() {
+                var scroller = findActiveScroller();
+                if (!scroller) { setEnabled(false); return; }
+                setEnabled(getScrollTop(scroller) > THRESHOLD_PX);
+            }
+
+            btn.addEventListener('click', function() {
+                var scroller = findActiveScroller();
+                if (!scroller) return;
+                setScrollTop(scroller, 0);
+            });
+
+            // Listen on all common containers (plus window/document) so the
+            // button toggles correctly regardless of which one actually
+            // overflows.
+            var attachTargets = [];
+            var sel = [
+                '[data-testid="stMainBlockContainer"]',
+                '[data-testid="stAppViewBlockContainer"]',
+                '[data-testid="stMain"]',
+                'section.main',
+                '.stApp',
+            ];
+            for (var k = 0; k < sel.length; k++) {
+                var nodes = document.querySelectorAll(sel[k]);
+                for (var m = 0; m < nodes.length; m++) attachTargets.push(nodes[m]);
+            }
+            if (window) attachTargets.push(window);
+            if (document) attachTargets.push(document);
+            for (var n = 0; n < attachTargets.length; n++) {
+                try {
+                    attachTargets[n].addEventListener('scroll', refresh, { passive: true });
+                } catch (e) {}
+            }
+            // Initial state, plus a short poll after first render while
+            // React mounts its widgets.
+            refresh();
+            var tries = 0;
+            var tid = setInterval(function() {
+                tries += 1;
+                refresh();
+                if (tries >= 25) clearInterval(tid);
+            }, 100);
+        })();
+        </script>
+        """,
+        unsafe_allow_javascript=True,
+    )
+
+
 @st.dialog(title="Attribute Description")
 def show_attribute_description(attr_name: str):
     if not has_schema_attributes:
@@ -174,6 +782,12 @@ def page_start():
         st.subheader("Pipeline")
 
         pipeline_packages = pipeline.packages
+        has_packages = bool(pipeline_packages)
+        is_busy = bool(event)
+        with st.container(horizontal=True):
+            render_save_config_button(disabled=(not has_packages or is_busy))
+            render_load_config_button(disabled=is_busy)
+
         if not pipeline_packages:
             st.info("Select package on right side.")
 
@@ -203,6 +817,8 @@ def page_start():
             if st.button("Solve", disabled=no_solve):
                 session_state.event = "solve"
                 st.rerun()
+
+            st.button("Prev", disabled=True, key="btn_start_prev")
 
             no_next = bool(event) or has_attribute_problem or not pipeline_packages
             if st.button("Next", disabled=no_next):
@@ -236,6 +852,7 @@ def page_model():
 
     with column_pipeline:
         st.subheader("Pipeline")
+        render_save_config_button(disabled=bool(event))
 
         for package in pipeline.packages:
             if edit_package_uid and package.uid == edit_package_uid:
@@ -274,7 +891,7 @@ def page_model():
                 session_state.event = "solve"
                 st.rerun()
 
-            if st.button("Prev"):
+            if st.button("Prev", disabled=bool(event)):
                 session_state.page = "start"
                 session_state.error = None
                 st.rerun()
@@ -658,6 +1275,7 @@ def page_setting():
 
     pipeline = session_state.pipeline
     edit_package_uid = session_state.package_uid
+    event = session_state.event
 
     assert pipeline is not None
 
@@ -665,6 +1283,7 @@ def page_setting():
 
     with column_pipeline:
         st.subheader("Pipeline")
+        render_save_config_button(disabled=bool(event))
 
         for package in pipeline.packages:
             if edit_package_uid and package.uid == edit_package_uid:
@@ -679,12 +1298,14 @@ def page_setting():
                         st.rerun()
 
         with st.container(horizontal=True):
-            if st.button("Prev"):
+            st.button("Solve", disabled=True, key="btn_setting_solve")
+
+            if st.button("Prev", disabled=bool(event)):
                 session_state.page = "model"
                 session_state.error = None
                 st.rerun()
 
-            if st.button("Next"):
+            if st.button("Next", disabled=bool(event)):
                 session_state.page = "install"
                 session_state.event = "satisfy"
                 session_state.error = None
@@ -752,6 +1373,7 @@ def page_install():
 
     with column_pipeline:
         st.subheader("Pipeline")
+        render_save_config_button(disabled=bool(event))
 
         for package in pipeline.packages:
             with st.container(border=True):
@@ -759,12 +1381,14 @@ def page_install():
                 render_package_models(pipeline, package)
 
         with st.container(horizontal=True):
+            st.button("Solve", disabled=True, key="btn_install_solve")
+
             if st.button("Prev", disabled=bool(event)):
                 session_state.page = "setting"
                 session_state.error = None
                 st.rerun()
 
-            if st.button("Next", disabled=not satisfied):
+            if st.button("Next", disabled=(bool(event) or not satisfied)):
                 session_state.page = "run"
                 session_state.event = "build"
                 session_state.error = None
@@ -1156,6 +1780,21 @@ def page_run():
     if runner is not None:
         st.success("Ready to run.")
 
+        is_busy = bool(event)
+        with st.container(horizontal=True):
+            if st.button("Prev", key="btn_run_prev", disabled=is_busy):
+                session_state.reports = []
+                session_state.batch_grouped = []
+                session_state.batch_rows = []
+                session_state.export_json = ""
+                session_state.export_csv = ""
+                session_state.file = None
+                session_state.error = None
+                session_state.page = "install"
+                session_state.event = ""
+                st.rerun()
+            render_save_config_button(disabled=is_busy)
+
         files = st.file_uploader(
             "Select image/video(s)",
             key="upload_input",
@@ -1449,6 +2088,41 @@ global_style = """
     padding: 0 0.8rem;
     font-size: 0.85rem;
 }
+
+.back-to-top-wrapper {
+    position: fixed;
+    right: 2rem;
+    bottom: 2rem;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.back-to-top-wrapper button {
+    pointer-events: auto;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    border: none;
+    background: #f0f2f6;
+    color: #31333f;
+    font-size: 1.2rem;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    transition: opacity 0.2s ease, background 0.2s ease;
+    opacity: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.back-to-top-wrapper button:hover:not(:disabled) {
+    background: #e0e4eb;
+}
+
+.back-to-top-wrapper button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
 """
 
 
@@ -1540,6 +2214,8 @@ def main():
         return
 
     pages[page]()
+
+    render_back_to_top()
 
 
 if __name__ == "__main__":
