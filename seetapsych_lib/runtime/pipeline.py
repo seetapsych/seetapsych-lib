@@ -289,6 +289,7 @@ class Pipeline:
 
     def get_package(
         self,
+        *,
         uid: schema.Uid | None = None,
         name: str | None = None,
         provide: str | None = None,

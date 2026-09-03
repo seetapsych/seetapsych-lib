@@ -246,6 +246,11 @@ def main():
     # Download missing models required for the pipeline to run
     pipeline.cache_models()
 
+    # Set parameters
+    package = pipeline.get_package(provide="face/detection")
+    assert package is not None
+    pipeline.set_parameters(package.uid, {"input_size": [640, 640]})
+
     # Create a basic executor
     runner = Runner(pipeline)
     # Or create a parallel executor
