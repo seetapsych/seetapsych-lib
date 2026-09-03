@@ -262,6 +262,10 @@ if __name__ == "__main__":
     main()
 ```
 
+## Built-in Modules
+
+This library also ships with built-in algorithm modules. See the full list and documentation in [MODULES.md](https://github.com/seetapsych/seetapsych-lib/blob/main/MODULES.md).
+
 ## Configuration
 
 ### Environment Variables

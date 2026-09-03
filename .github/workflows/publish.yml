@@ -60,7 +60,10 @@ jobs:
 
       - name: Extract tag name
         id: get_tag
-        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${TAG#r}" >> "$GITHUB_OUTPUT"
         shell: bash
 
       - name: Determine release type
@@ -142,7 +145,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.get_tag.outputs.TAG }}
-          release_name: Release ${{ steps.get_tag.outputs.TAG }}
+          release_name: Release ${{ steps.get_tag.outputs.VERSION }}
           body: ${{ steps.release_body.outputs.BODY }}
           draft: false
           prerelease: ${{ steps.release_type.outputs.PRERELEASE }}
