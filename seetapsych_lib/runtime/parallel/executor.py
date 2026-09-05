@@ -594,9 +594,11 @@ class ParallelExecutor:
             q.put(action_msg)
 
     def stop(self):
-        """
-        send stop message
-        :return:
+        """Send graceful shutdown signal to all worker processes.
+
+        Enqueues a :data:`MessageType.STOP` message on every worker input
+        queue, the final aggregator queue, and closes auxiliary queues so threads
+        exit cleanly after draining their pending work.
         """
         self.__stop_event.set()
 
@@ -615,22 +617,37 @@ class ParallelExecutor:
         self.__time_queue.put(None)
 
     def terminate(self):
+        """Send ``SIGTERM`` (or platform equivalent) to all worker processes."""
         for p in self.__processes.values():
             p.terminate()
 
     def kill(self):
+        """Send ``SIGKILL`` (or platform equivalent) to all worker processes."""
         for p in self.__processes.values():
             p.kill()
 
     def join(self, timeout: float | None = None):
+        """Wait for all worker processes to exit.
+
+        Args:
+            timeout: Maximum seconds to wait per process; ``None`` blocks
+                indefinitely.
+        """
         for p in self.__processes.values():
             p.join(timeout)
 
     def dispose(self, wait_seconds: float | None = None):
-        """
-        send stop message, and wait some time before kill them
-        :param wait_timeout:
-        :return:
+        """Gracefully shut down the executor, then force-kill lingering workers.
+
+        Sequence:
+            1. Call :meth:`stop` to send graceful stop.
+            2. Wait up to ``wait_seconds`` for workers to join.
+            3. Call :meth:`terminate` on survivors.
+            4. Join again briefly.
+
+        Args:
+            wait_seconds: Grace period for workers to drain before
+                ``terminate`` is issued. Defaults to ``1`` second.
         """
         if wait_seconds is None:
             wait_seconds = 1

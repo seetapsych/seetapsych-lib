@@ -21,7 +21,19 @@ __all__ = [
 
 
 class PackageNode:
+    """Node in the package dependency graph.
+
+    Aggregates one or more packages that share the same dependency level,
+    exposing the union of provided/required attributes and incoming edges.
+    """
+
     def __init__(self, packages: list[schema.Package], inputs: list["PackageNode"] | None = None):
+        """Initialize a package graph node.
+
+        Args:
+            packages: Packages grouped under this node (typically one).
+            inputs: Predecessor nodes providing the required attributes.
+        """
         if inputs is None:
             inputs = []
 
@@ -37,39 +49,56 @@ class PackageNode:
         self.__inputs = inputs
 
     def __hash__(self) -> int:
+        """Hash by object identity (graph nodes are unique)."""
         return id(self)
 
     @property
     def provides(self) -> list[str]:
+        """Return sorted, deduplicated attribute names provided by this node."""
         return self.__provides
 
     @property
     def requires(self) -> list[str]:
+        """Return sorted, deduplicated attribute names required by this node."""
         return self.__requires
 
     @property
     def package(self) -> schema.Package:
+        """Return the first package stored in this node (for single-package nodes)."""
         return self.__packages[0]
 
     @property
     def packages(self) -> list[schema.Package]:
+        """Return all packages stored in this node."""
         return self.__packages
 
     @property
     def inputs(self) -> list["PackageNode"]:
+        """Return predecessor nodes in the dependency graph."""
         return self.__inputs
 
 
 def build_graph(packages: list[schema.Package]) -> list[PackageNode]:
+    """Build a dependency graph from an ordered package list.
+
+    Each package becomes a :class:`PackageNode` whose incoming edges are the
+    nodes providing its required attributes.
+
+    Args:
+        packages: Topologically ordered packages from a resolved pipeline.
+
+    Returns:
+        A list of :class:`PackageNode` in the same order as ``packages``.
+
+    Raises:
+        RuntimeError: If a required attribute has no provider among the
+            previously processed packages.
+    """
     node_providers: dict[str, PackageNode] = {}
     nodes: list[PackageNode] = []
-    # outputs: set[PackageNode] = set()
-    # node_outputs: dict[PackageNode, list[PackageNode]] = defaultdict([])
 
-    # basic build graph
     for p in packages:
         inputs: list[PackageNode] = []
-        # find providers
         for attr in p.requires:
             inode = node_providers.get(attr, None)
             if inode is None:
@@ -78,29 +107,45 @@ def build_graph(packages: list[schema.Package]) -> list[PackageNode]:
         inputs = list(set(inputs))
         node = PackageNode(packages=[p], inputs=inputs)
 
-        # outputs.add(node)
         nodes.append(node)
         for attr in p.provides:
             node_providers[attr] = node
-        # for inode in inputs:
-        #     outputs.remove(inode)
-        #     node_outputs[inode].append(node)
 
     return nodes
 
 
 @dataclass
 class ExchangeData:
+    """Payload passed between nodes in the parallel execution graph.
+
+    Attributes:
+        data: Input modals (shared reference across nodes).
+        report: Accumulated attribute report for the current frame.
+    """
+
     data: dict[str, Any]
     report: dict[str, Any]
 
 
 @dataclass
 class ExchangeAction:
+    """Control message broadcast to all parallel executors.
+
+    Attributes:
+        action: Action type; currently only ``"reset"`` is defined.
+    """
+
     action: Literal["reset"]
 
 
 class PackageExecutor(Executor):
+    """Per-package worker for parallel pipeline execution.
+
+    Implements the :class:`Executor` protocol required by
+    :class:`ParallelExecutor`. Handles lazy package instantiation, control
+    actions (reset), and inference with report merging from multiple inputs.
+    """
+
     def __init__(
         self,
         package: schema.Package,
@@ -110,6 +155,21 @@ class PackageExecutor(Executor):
         *,
         cache_dir: str | None = None,
     ):
+        """Initialize a package executor.
+
+        The actual package instance is created lazily in :meth:`init`.
+
+        Args:
+            package: Package spec to instantiate.
+            models: Selected model specs for this package.
+            parameters: Parameter overrides for this package.
+            device: Target device for model inference. Accepts a
+                :class:`api.Device`, a bare backend string (``"cpu"``,
+                ``"cuda"``, ``"gpu"``), a colon-indexed string to pick a
+                specific card (e.g. ``"cuda:1"``), or ``None`` to fall back
+                to the runner-level device selection.
+            cache_dir: Override model cache directory.
+        """
         self.__package = package
         self.__models = models
         self.__parameters = parameters
@@ -120,9 +180,11 @@ class PackageExecutor(Executor):
         self.__instance: api.Instance | None = None
 
     def __hash__(self) -> int:
+        """Hash by object identity."""
         return id(self)
 
     def init(self):
+        """Instantiate the package, build and cache models, allocate device resources."""
         package = self.__package
         _cfg_models = self.__models
         _cfg_parameters = self.__parameters
@@ -131,7 +193,6 @@ class PackageExecutor(Executor):
 
         loaded_package = load_package(package)
 
-        # get models and parameters
         config_models = _cfg_models
         config_parameters = _cfg_parameters
 
@@ -145,7 +206,6 @@ class PackageExecutor(Executor):
         for param in config_parameters:
             parameter_dict[param.name] = param.value
 
-        # central cache models
         for model in usage_models:
             model.cache()
 
@@ -153,6 +213,14 @@ class PackageExecutor(Executor):
         self.__instance = instance
 
     def action(self, data: ExchangeAction):
+        """Handle a control action broadcast from the runner.
+
+        Args:
+            data: Action descriptor.
+
+        Raises:
+            RuntimeError: If :meth:`init` has not been called yet.
+        """
         if self.__instance is None:
             raise RuntimeError("PackageExecutor not initialized: call init() before action()")
 
@@ -161,12 +229,25 @@ class PackageExecutor(Executor):
                 self.__instance.reset()
 
     def run(self, *args: ExchangeData) -> ExchangeData:
+        """Run inference on a frame, merging reports from all input nodes.
+
+        Args:
+            *args: One or more :class:`ExchangeData` inputs from predecessor
+                nodes. The first input supplies the shared ``data`` payload;
+                subsequent inputs contribute their report entries on top.
+
+        Returns:
+            A new :class:`ExchangeData` with the merged report updated by
+            this package's inference output.
+
+        Raises:
+            RuntimeError: If :meth:`init` has not been called yet.
+        """
         if self.__instance is None:
             raise RuntimeError("PackageExecutor not initialized: call init() before run()")
 
         data = args[0].data
         report = copy.copy(args[0].report)
-        # merge report
         for u in args[1:]:
             report.update(u.report)
         output = self.__instance.inference(data=data, report=report)
@@ -178,6 +259,14 @@ class PackageExecutor(Executor):
 
 
 class ParallelRunner:
+    """Parallel pipeline executor based on a dependency-aware thread pool.
+
+    Builds a DAG of the pipeline packages, dispatches each node to a
+    :class:`PackageExecutor` scheduled by a :class:`ParallelExecutor`, and
+    merges reports when nodes have multiple predecessors. Supports per-attribute
+    device pinning via a device map.
+    """
+
     def __init__(
         self,
         pipeline: Pipeline,
@@ -186,6 +275,39 @@ class ParallelRunner:
         cache_dir: str | None = None,
         profile: bool = False,
     ):
+        """Initialize a ParallelRunner.
+
+        Device resolution order:
+            1. Per-attribute entry in the ``device`` dict (if a dict is given).
+            2. Global ``device`` override.
+            3. Round-robin from the detected GPU/CPU pool.
+
+        The empty-key ``""`` or underscore ``"_"`` entry in a device dict is
+        treated as the fallback global device.
+
+        Args:
+            pipeline: A solved and satisfied Pipeline configuration.
+            device: Execution device specification. In every position below,
+                a device may be given as a :class:`api.Device`, a bare
+                backend string (``"cpu"``, ``"cuda"``, ``"gpu"``), or a
+                colon-indexed string to select a specific physical card
+                (e.g. ``"cuda:0"``, ``"cuda:1"``). Accepted shapes:
+
+                * :class:`api.Device` or ``str`` — global device applied to
+                  every package.
+                * ``dict`` mapping attribute name (or ``""`` / ``"_"`` for
+                  default) to a device for per-attribute pinning.
+                * ``None`` or ``"auto"`` — round-robin from available GPUs,
+                  fall back to CPU when no GPU is detected.
+            cache_dir: Override the model cache directory.
+            profile: When True, record per-executor timings exposed via
+                :meth:`time_summary`.
+
+        Raises:
+            PipelineHasProblem: If ``pipeline`` still has unresolved
+                dependency problems.
+            PipelineUnsatisfied: If runtime prerequisites are missing.
+        """
         self.__parallel_executor: ParallelExecutor | None = None
 
         global_device: api.Device | None = None
@@ -287,6 +409,7 @@ class ParallelRunner:
 
     @property
     def inputs(self) -> list[str]:
+        """Return the required input modal names for :meth:`run` / :meth:`run_async`."""
         return self.__inputs
 
     def run_async(
@@ -294,6 +417,26 @@ class ParallelRunner:
         data: dict[str, Any] | Any,
         timestamp: float | None = None,
     ) -> Future[dict[str, Any]]:
+        """Submit a frame for parallel inference and return a future.
+
+        This method returns immediately without blocking; call
+        :meth:`Future.get` on the returned object (or use :meth:`run`) to
+        wait for the result.
+
+        Args:
+            data: Either a single payload for the ``"default"`` modal, or a
+                dict mapping modal names to their payloads.
+            timestamp: Optional wall-clock timestamp for the frame. Defaults
+                to :func:`time.time` when omitted.
+
+        Returns:
+            A :class:`Future` resolving to the accumulated attribute report.
+
+        Raises:
+            RuntimeError: If the runner has been disposed or was not properly
+                initialized.
+            MissingInputModal: If ``data`` is missing any required modal.
+        """
         if self.__parallel_executor is None:
             raise RuntimeError("ParallelRunner not initialized")
 
@@ -341,9 +484,33 @@ class ParallelRunner:
         timestamp: float | None = None,
         timeout: float | None = None,
     ) -> dict[str, Any]:
+        """Run inference on a single frame and wait for the result.
+
+        Convenience wrapper equivalent to
+        ``run_async(data, timestamp).get(timeout=timeout)``.
+
+        Args:
+            data: Either a single payload or a modal-to-payload dict.
+            timestamp: Optional wall-clock timestamp for the frame.
+            timeout: Maximum seconds to wait. ``None`` blocks indefinitely.
+
+        Returns:
+            The accumulated attribute report dictionary.
+
+        Raises:
+            RuntimeError: If the runner is disposed or uninitialized.
+            MissingInputModal: If required input modals are missing.
+            TimeoutError: If the result is not ready within ``timeout``.
+        """
         return self.run_async(data, timestamp).get(timeout=timeout)
 
     def reset(self):
+        """Reset frame counter and broadcast ``reset`` to all package executors.
+
+        Raises:
+            RuntimeError: If the runner has been disposed or was not properly
+                initialized.
+        """
         if self.__parallel_executor is None:
             raise RuntimeError("ParallelRunner not initialized")
 
@@ -353,13 +520,22 @@ class ParallelRunner:
         self.__parallel_executor.action(exchange_action)
 
     def dispose(self):
+        """Stop the parallel executor and release all worker resources."""
         if self.__parallel_executor is not None:
             self.__parallel_executor.dispose()
 
     def __del__(self):
+        """Destructor ensuring :meth:`dispose` is called."""
         self.dispose()
 
     def time_summary(self) -> dict[str, float]:
+        """Return per-executor average inference times.
+
+        Returns:
+            Mapping of executor tag to average elapsed seconds. An empty
+            dict is returned when profiling is disabled or the runner has
+            been disposed.
+        """
         if self.__parallel_executor is not None:
             return self.__parallel_executor.time_summary()
         return {}

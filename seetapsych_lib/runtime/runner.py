@@ -21,34 +21,59 @@ __all__ = [
 
 
 class PipelineHasProblem(Exception):
-    pass
+    """Raised when the pipeline still has unresolved dependency problems."""
 
 
 class PipelineUnsatisfied(Exception):
-    pass
+    """Raised when the pipeline has unsatisfied runtime prerequisites."""
 
 
 class MissingInputModal(Exception):
-    pass
+    """Raised when a required input modal is not provided to ``run()``."""
 
 
 class TimeSummary:
+    """Simple running average of wall-clock times grouped by tag.
+
+    Each stored entry tracks (count, total_seconds); the reported average is
+    rounded to three decimals.
+    """
+
     def __init__(self):
         self.__summary: dict[str, list[float | int]] = defaultdict(lambda: [int(0), float(0)])
 
     def add(self, tag: str, time_seconds: float):
+        """Record a new timing sample.
+
+        Args:
+            tag: Identifier for the measured operation.
+            time_seconds: Elapsed wall-clock time in seconds.
+        """
         value = self.__summary[tag]
         value[0] += 1
         value[1] += time_seconds
 
     def clear(self):
+        """Discard all recorded samples."""
         self.__summary.clear()
 
     def summary(self) -> dict[str, float]:
+        """Return per-tag average times.
+
+        Returns:
+            Mapping of ``tag`` to average elapsed time in seconds, rounded
+            to three decimal places.
+        """
         return {tag: round(value[1] / value[0], 3) for tag, value in self.__summary.items()}
 
 
 class Runner:
+    """Sequential pipeline executor.
+
+    Instantiates each package from a resolved :class:`Pipeline`, caches the
+    required models, and runs inference over input frames in order.
+    """
+
     def __init__(
         self,
         pipeline: Pipeline,
@@ -57,6 +82,36 @@ class Runner:
         cache_dir: str | None = None,
         profile: bool = False,
     ):
+        """Initialize a Runner.
+
+        The device is auto-detected by default: NVIDIA GPU if available,
+        otherwise CPU. ``"auto"`` (or a Device with type ``"auto"``) triggers
+        the same behaviour.
+
+        Args:
+            pipeline: A solved and satisfied Pipeline configuration.
+            device: Target execution device. Accepts:
+
+                * :class:`api.Device` — an explicit device descriptor.
+                * A bare backend string — ``"cpu"``, ``"cuda"``, ``"gpu"``
+                  (aliased to ``"cuda"``).
+                * A colon-indexed string to pick a specific physical card:
+                  ``"cuda:0"``, ``"cuda:1"``, ``"cuda:2"`` … the suffix is
+                  parsed as the zero-based device index.
+                * ``"auto"`` or ``None`` — auto-select from available GPUs,
+                  fall back to CPU when no GPU is detected.
+            cache_dir: Override the model cache directory.
+            profile: When True, record per-package inference timings and
+                expose them via :meth:`time_summary`.
+
+        Raises:
+            PipelineHasProblem: If ``pipeline`` still has unresolved
+                dependency problems (call :meth:`Pipeline.solve` first).
+            PipelineUnsatisfied: If runtime prerequisites (requirements,
+                imports, cached models) are missing (call
+                :meth:`Pipeline.install_requirements` /
+                :meth:`Pipeline.cache_models` first).
+        """
         if isinstance(device, str):
             device = api.Device(device)
 
@@ -118,9 +173,26 @@ class Runner:
 
     @property
     def inputs(self) -> list[str]:
+        """Return the required input modal names for :meth:`run`."""
         return self.__inputs
 
     def run(self, data: dict[str, Any] | Any, timestamp: float | None = None) -> dict[str, Any]:
+        """Run inference on a single input frame.
+
+        Args:
+            data: Either a single payload for the ``"default"`` modal, or a
+                dict mapping modal names to their payloads.
+            timestamp: Optional wall-clock timestamp for the frame. Defaults
+                to :func:`time.time` when omitted.
+
+        Returns:
+            The accumulated attribute report dictionary, including the
+            injected ``"time"`` and ``"frame_tick"`` metadata fields.
+
+        Raises:
+            MissingInputModal: If ``data`` is missing any required modal
+                (see :attr:`inputs`).
+        """
         if not self.__instances:
             return {}
 
@@ -163,16 +235,30 @@ class Runner:
         return report
 
     def reset(self):
+        """Reset per-frame state and all package instances.
+
+        Reverts the internal frame tick and calls ``reset()`` on every
+        created package instance (clears any per-session state such as
+        running trackers or smoothing buffers).
+        """
         self.__frame_tick = self.__start_frame_tick
         for instance in self.__instances:
             instance.reset()
 
     def dispose(self):
+        """Release resources held by all package instances."""
         for instance in self.__instances:
             instance.dispose()
         self.__instances.clear()
 
     def time_summary(self) -> dict[str, float]:
+        """Return per-package average inference times.
+
+        Returns:
+            Mapping of package name to average elapsed seconds, rounded to
+            three decimal places. Meaningful only when profiling was enabled
+            via the constructor ``profile`` flag.
+        """
         return self.__time_summary.summary()
 
 

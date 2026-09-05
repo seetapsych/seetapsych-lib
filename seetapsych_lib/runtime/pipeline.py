@@ -27,60 +27,193 @@ __all__ = [
 
 
 class PipelineConfig(BaseModel):
-    name: str = Field("", description="Pipeline name")
-    description: str = Field("", description="Pipeline description")
+    """Mutable runtime snapshot of a :class:`Pipeline` ready for :class:`Runner`.
+
+    Carries the ordered package graph, selected module metadata, explicit
+    target attributes, and any per-package parameter/model overrides.
+    Serialize this object to persist or share a pipeline definition.
+
+    Attributes:
+        name: Human-readable pipeline label, for display/logging only.
+        description: Free-form textual notes about the pipeline purpose or setup.
+        modules: Module metadata for every package currently bound; used to
+            check requirements / ownership.
+        packages: Topologically ordered packages to be executed by the runner.
+        attributes: Target attribute keys requested by the user; a subset of
+            the union of ``provides``.
+        parameters: Runtime parameter overrides keyed by ``package.uid``.
+        models: Selected model configurations keyed by ``package.uid``.
+    """
+
+    name: str = Field("", description="Human-readable pipeline label, for display/logging only.")
+    description: str = Field("", description="Free-form textual notes about the pipeline purpose or setup.")
 
     modules: list[schema.ModuleSpec] = Field(
-        [], description="The the current package modules, which should be satisfied"
+        [],
+        description="Module metadata for every package currently bound; used to check requirements / ownership.",
     )
-    packages: list[schema.Package] = Field([], description="The executing packages")
-    attributes: list[str] = Field([], description="The focused attributes")
+    packages: list[schema.Package] = Field(
+        [], description="Topologically ordered packages to be executed by the runner."
+    )
+    attributes: list[str] = Field(
+        [], description="Target attribute keys requested by the user; a subset of the union of ``provides``."
+    )
 
     parameters: dict[schema.Uid, list[schema.Parameter]] = Field(
-        {}, description="Parameters setting based on `package.uid`"
+        {}, description="Runtime parameter overrides keyed by ``package.uid``."
     )
-    models: dict[schema.Uid, list[schema.Model]] = Field({}, description="Models setting based on `package.uid`")
+    models: dict[schema.Uid, list[schema.Model]] = Field(
+        {}, description="Selected model configurations keyed by ``package.uid``."
+    )
 
 
 class InvalidConfig(BaseModel):
-    modules: list[schema.ModuleSpec] = Field([])
-    packages: list[schema.Package] = Field([])
-    models: dict[schema.Uid, list[schema.Model]] = Field({})
-    attributes: list[str] = Field([])
-    parameters: dict[schema.Uid, list[schema.Parameter]] = Field({})
+    """Items flagged by :meth:`Pipeline.validate` that could not be matched in the factory.
+
+    Every listed item exists in the pipeline config but has no corresponding
+    entry in the bound :class:`Factory`. When ``update`` is True these items
+    are dropped/overwritten instead of reported.
+
+    Attributes:
+        modules: Module UIDs present in config but absent from the factory.
+        packages: Package UIDs present in config but absent from the factory.
+        models: Models with unknown UID or mismatched package, grouped by
+            ``package.uid``.
+        attributes: Requested attribute keys that are not declared by any
+            factory-registered provider.
+        parameters: Parameter overrides whose name is unknown to the owning
+            package, grouped by ``package.uid``.
+    """
+
+    modules: list[schema.ModuleSpec] = Field(
+        [], description="Module UIDs present in config but absent from the factory."
+    )
+    packages: list[schema.Package] = Field(
+        [], description="Package UIDs present in config but absent from the factory."
+    )
+    models: dict[schema.Uid, list[schema.Model]] = Field(
+        {}, description="Models with unknown UID or mismatched package, grouped by ``package.uid``."
+    )
+    attributes: list[str] = Field(
+        [], description="Requested attribute keys that are not declared by any factory-registered provider."
+    )
+    parameters: dict[schema.Uid, list[schema.Parameter]] = Field(
+        {}, description="Parameter overrides whose name is unknown to the owning package, grouped by ``package.uid``."
+    )
 
     def __bool__(self) -> bool:
+        """Return True if any invalid item exists."""
         return bool(self.modules or self.packages or self.models or self.attributes or self.parameters)
 
 
 class ProblemConfig(BaseModel):
-    missing_module_packages: list[schema.Package] = Field([], description="no module contains those packages")
-    missing_model_packages: list[schema.Package] = Field([], description="missing model in usage_models")
-    attributes: list[str] = Field([], description="attributes required but not provided in packages")
+    """Missing dependencies discovered by :meth:`Pipeline.problem`.
+
+    Lists packages whose owning module has not been added, packages still
+    missing a model selection for a declared ``usage_models`` slot, and
+    attribute keys that are not produced by any currently bound package.
+
+    Attributes:
+        missing_module_packages: Packages whose parent :class:`ModuleSpec`
+            has not yet been appended to ``modules``.
+        missing_model_packages: Packages with at least one empty
+            ``usage_models`` slot and no corresponding model selected yet.
+        attributes: Attribute keys required (or explicitly targeted) with
+            no provider in ``packages``.
+    """
+
+    missing_module_packages: list[schema.Package] = Field(
+        [], description="Packages whose parent :class:`ModuleSpec` has not yet been appended to ``modules``."
+    )
+    missing_model_packages: list[schema.Package] = Field(
+        [],
+        description="Packages with at least one empty ``usage_models`` slot and no corresponding model selected yet.",
+    )
+    attributes: list[str] = Field(
+        [], description="Attribute keys required (or explicitly targeted) with no provider in ``packages``."
+    )
 
     def __bool__(self) -> bool:
+        """Return True if any unresolved dependency problem exists."""
         return bool(self.missing_module_packages or self.missing_model_packages or self.attributes)
 
 
 class SolvedConfig(BaseModel):
-    add_modules: list[schema.ModuleSpec] = Field([])
-    add_packages: list[schema.Package] = Field([])
-    add_attributes: list[str] = Field([])
-    add_models: list[schema.Model] = Field([])
+    """Audit trail produced by :meth:`Pipeline.solve` describing what was auto-added.
 
-    unsolved: ProblemConfig | None = Field(None)
+    Enables callers to inspect exactly which modules, packages, attributes
+    and models were introduced automatically, plus any sub-problems the
+    solver could not fully resolve on its own.
+
+    Attributes:
+        add_modules: Module specs inserted into the pipeline config during
+            the solve pass.
+        add_packages: Packages inserted into the execution order as
+            attribute providers.
+        add_attributes: Target attribute keys for which a provider was
+            successfully added.
+        add_models: Model configurations selected automatically from
+            package-level ``models`` lists.
+        unsolved: Subset of :class:`ProblemConfig` items that the solver
+            could not auto-resolve.
+    """
+
+    add_modules: list[schema.ModuleSpec] = Field(
+        [], description="Module specs inserted into the pipeline config during the solve pass."
+    )
+    add_packages: list[schema.Package] = Field(
+        [], description="Packages inserted into the execution order as attribute providers."
+    )
+    add_attributes: list[str] = Field(
+        [], description="Target attribute keys for which a provider was successfully added."
+    )
+    add_models: list[schema.Model] = Field(
+        [], description="Model configurations selected automatically from package-level ``models`` lists."
+    )
+    unsolved: ProblemConfig | None = Field(
+        None, description="Subset of :class:`ProblemConfig` items that the solver could not auto-resolve."
+    )
 
     def __bool__(self) -> bool:
+        """Return True if anything changed or unsolved problems still remain."""
         return bool(self.add_modules or self.add_packages or self.add_attributes or self.add_models or self.unsolved)
 
 
 class UnsatisfactionConfig(BaseModel):
-    modules: list[schema.ModuleSpec] = Field([], description="module requirement has not satisfied")
-    entries: list[schema.Entry] = Field([], description="package/model entry is not callable")
-    models: list[schema.Model] = Field([], description="model did not exists in cache")
-    imports: list[list[str]] = Field([], description="missing python package while checking config")
+    """Runtime blockers reported by :meth:`Pipeline.satisfied`.
+
+    Lists modules whose PyPI/Git requirements are still missing, package and
+    model :class:`Entry` references that cannot be imported, and models not
+    yet on disk. ``imports`` carries diagnostic tuples for the most common
+    failure cause (a missing Python package).
+
+    Attributes:
+        modules: Modules whose ``requirements`` or ``refs`` are not fully
+            installed.
+        entries: Package or model :class:`Entry` references that cannot be
+            imported / are not callable.
+        models: Model configurations whose files cannot be located in the
+            local model cache.
+        imports: Failed import diagnostics as
+            ``[fully_qualified_entry, missing_python_package]`` tuples.
+    """
+
+    modules: list[schema.ModuleSpec] = Field(
+        [], description="Modules whose ``requirements`` or ``refs`` are not fully installed."
+    )
+    entries: list[schema.Entry] = Field(
+        [], description="Package or model :class:`Entry` references that cannot be imported / are not callable."
+    )
+    models: list[schema.Model] = Field(
+        [], description="Model configurations whose files cannot be located in the local model cache."
+    )
+    imports: list[list[str]] = Field(
+        [],
+        description="Failed import diagnostics as ``[fully_qualified_entry, missing_python_package]`` tuples.",
+    )
 
     def __bool__(self) -> bool:
+        """Return True if any runtime prerequisite is still unsatisfied."""
         return bool(self.modules or self.entries or self.models)
 
 
@@ -88,26 +221,33 @@ InstallBackend = Literal["pip"]
 
 
 class FactoryRequired(Exception):
-    pass
+    """Raised when a factory-dependent operation is called without a factory bound."""
 
 
 class ModuleNotFound(Exception):
-    pass
+    """Raised when a requested module cannot be found in the factory."""
 
 
 class PackageNotFound(Exception):
-    pass
+    """Raised when a requested package cannot be found in the factory."""
 
 
 class ModelNotFound(Exception):
-    pass
+    """Raised when a requested model cannot be found in the factory."""
 
 
 class AttributeNotProvided(Exception):
-    pass
+    """Raised when a requested attribute has no provider in the factory."""
 
 
 class Pipeline:
+    """A dependency-aware computation graph builder for algorithm packages.
+
+    Declaratively specifies the desired attributes or packages, then resolves
+    dependencies, selects models, and produces a runnable configuration for
+    :class:`Runner` or :class:`ParallelRunner`.
+    """
+
     def __init__(
         self,
         factory: Factory | None = None,
@@ -120,16 +260,22 @@ class Pipeline:
         models: dict[schema.Uid, list[schema.Uid]] | None = None,
         parameters: dict[schema.Uid, dict[str, Any]] | None = None,
     ):
-        """
-        To initialize a pipeline, you can either directly provide a config.
-        Or supply the required packages or attributes,
-            then we will then search for and construct the pipeline in the factory.
-        :param factory:
-        :param config: Pipeline config.
-        :param packages:
-        :param attributes:
-        :param name:
-        :param description:
+        """Initialize a Pipeline.
+
+        You may either pass a complete ``config`` directly, or supply the
+        desired ``packages`` / ``attributes`` along with a ``factory`` so the
+        pipeline can search for and wire the required modules automatically.
+
+        Args:
+            factory: Factory instance for querying modules, packages and models.
+                Required when adding packages/attributes or calling solve().
+            config: Pre-built pipeline configuration.
+            name: Override pipeline name.
+            description: Override pipeline description.
+            packages: Initial package UIDs to add from the factory.
+            attributes: Initial attribute names to target.
+            models: Initial model selection keyed by package UID.
+            parameters: Initial parameter overrides keyed by package UID.
         """
         if config is None:
             config = PipelineConfig.model_construct()
@@ -294,9 +440,17 @@ class Pipeline:
         name: str | None = None,
         provide: str | None = None,
     ) -> schema.Package | None:
-        """
-        Query the first matching package in the current configuration by uid, name, or provide.
-        Priority: uid > name > provide.
+        """Query the first matching package in the current configuration.
+
+        Lookup priority: ``uid`` > ``name`` > ``provide``.
+
+        Args:
+            uid: Match by package unique ID.
+            name: Match by package display name.
+            provide: Match by an attribute the package provides.
+
+        Returns:
+            The first matched package, or ``None`` if not found.
         """
         if uid is not None:
             return self._query_package(uid)
@@ -437,25 +591,30 @@ class Pipeline:
 
     @property
     def config(self) -> PipelineConfig:
-        """
-        Current working pipeline.
-        You can persist this object to a file and reconstruct it.
-        However, do not directly modify the return value here
-        unless you are fully aware of what you are doing.
-        :return: Current working pipeline.
+        """Return the current working pipeline configuration.
+
+        You can persist this object to a file and reconstruct the pipeline
+        from it later. Avoid mutating the returned value directly unless you
+        are aware of the consistency implications.
+
+        Returns:
+            Current working pipeline configuration.
         """
         return self.__config
 
     @property
     def packages(self) -> list[schema.Package]:
+        """Return the ordered list of packages in the pipeline."""
         return self.__config.packages
 
     @property
     def attributes(self) -> list[str]:
+        """Return the explicitly requested attribute names."""
         return self.__config.attributes
 
     @property
     def hidden_attributes(self) -> list[str]:
+        """Return attributes provided by packages but not explicitly requested."""
         packages = self.__config.packages
         pipeline_attributes = unique_list([attr for p in packages for attr in p.provides])
 
@@ -464,9 +623,11 @@ class Pipeline:
 
     @property
     def inputs(self) -> list[str]:
-        """
-        Get input modals, default is ['default']
-        :return:
+        """Return the required input modal names.
+
+        Returns:
+            Input modal names. Falls back to ``["default"]`` when no package
+            declares a specific input.
         """
         packages = self.__config.packages
 
@@ -477,9 +638,10 @@ class Pipeline:
         return ["default"] if not inputs else inputs
 
     def requirements(self) -> list[str]:
-        """
-        Get all module requirements
-        :return:
+        """Return all Python package requirements across included modules.
+
+        Returns:
+            Deduplicated list of requirement strings.
         """
         modules = self.__config.modules
         requirements = [req for m in modules for req in m.requirements]
@@ -500,16 +662,26 @@ class Pipeline:
         return None
 
     def validate(self, *, update: bool = False) -> InvalidConfig | None:
-        """
-        Validate pipeline with factory modules, include:
-            1. Update modules/packages/models if they were in factory
-            2. Check attributes/parameters exists or not
-        Notice: This function will change config via factory.
-        Notice: This function supports verifying whether the configuration is valid,
-            and does not perform dependency analysis.
-            If missing dependencies need to be added, the `solve` method should be called.
-        :param update: If update config according to factory
-        :return:
+        """Validate pipeline items against the factory.
+
+        Checks include:
+            1. Optionally updates modules/packages/models to factory versions.
+            2. Verifies attributes/parameters exist in the factory.
+
+        Note:
+            This method only validates structural integrity; it does **not**
+            perform dependency analysis. Call :meth:`solve` to add missing
+            dependencies automatically.
+
+        Args:
+            update: When True, overwrite existing config entries with fresh
+                copies from the factory where possible.
+
+        Returns:
+            :class:`InvalidConfig` with invalid items, or ``None`` if valid.
+
+        Raises:
+            FactoryRequired: If no factory is bound to the pipeline.
         """
         if self.__factory is None:
             raise FactoryRequired
@@ -602,9 +774,14 @@ class Pipeline:
         )
 
     def problem(self) -> ProblemConfig | None:
-        """
-        Check whether the current pipeline lacks attribute dependencies or model dependencies.
-        :return:
+        """Check for missing attribute providers, modules, or model selections.
+
+        Returns:
+            :class:`ProblemConfig` describing the issues, or ``None`` if all
+            dependencies are satisfied.
+
+        Raises:
+            FactoryRequired: If no factory is bound to the pipeline.
         """
         if self.__factory is None:
             raise FactoryRequired
@@ -675,10 +852,22 @@ class Pipeline:
         )
 
     def solve(self, ignore_models: bool = False) -> SolvedConfig | None:
-        """
-        For modules loaded through factory, check for missing attributes or package dependencies.
-        Supplement models that have not been selected.
-        :return: If nothing is done, it will return None.
+        """Resolve missing dependencies by adding packages, modules, and models.
+
+        Iteratively adds attribute providers and their parent modules until
+        all requested attributes can be produced. Then fills in missing model
+        selections using recommended defaults from the factory.
+
+        Args:
+            ignore_models: When True, skip automatic model selection and only
+                resolve packages/modules.
+
+        Returns:
+            :class:`SolvedConfig` describing what was added (and any
+            remaining unsolved problems), or ``None`` if nothing changed.
+
+        Raises:
+            FactoryRequired: If no factory is bound to the pipeline.
         """
         problem = self.problem()
         if problem is None:
@@ -813,13 +1002,20 @@ class Pipeline:
         return solved if solved else None
 
     def satisfied(self, *, cache_dir: str | None = None) -> tuple[bool, UnsatisfactionConfig | None]:
-        """
-        Check whether the current pipeline is ready to start running.
-        The following conditions will be checked:
-            1. Whether the requirements of all modules have been met.
-            2. Whether the entries of packages and models can be imported
-               and the calling functions can be obtained.
-        :return:
+        """Check whether the pipeline is ready to run.
+
+        Verifies:
+            1. All module Python package requirements are installed.
+            2. Package and model entry points can be imported successfully.
+            3. All configured models are present in the local cache.
+
+        Args:
+            cache_dir: Override the model cache directory for this check.
+
+        Returns:
+            A 2-tuple ``(ready, report)`` where ``ready`` is ``True`` when the
+            pipeline can be executed, and ``report`` is either
+            :class:`UnsatisfactionConfig` describing blockers or ``None``.
         """
         un_imports: list[list[str]] = []
         un_modules: list[schema.ModuleSpec] = []
@@ -882,10 +1078,11 @@ class Pipeline:
         return False, UnsatisfactionConfig(modules=un_modules, entries=un_entries, models=un_models, imports=un_imports)
 
     def install_requirements(self, *, backend: InstallBackend = "pip"):
-        """
-        Install all unsatisfied requirements
-        :param backend: This parameter is retained but currently has no effect.
-        :return:
+        """Install Python package requirements for all included modules.
+
+        Args:
+            backend: Reserved for future backend selection; currently uses
+                pip regardless of this value.
         """
         for module in self.__config.modules:
             log_requirements = " ".join(module.requirements)
@@ -893,10 +1090,14 @@ class Pipeline:
             install_module_requirements(module)
 
     def cache_models(self, *, cache_dir: str | None = None):
-        """
-        Cache all selected models
-        :param cache_dir:
-        :return:
+        """Download and cache all selected models locally.
+
+        Args:
+            cache_dir: Override the model cache directory.
+
+        Raises:
+            Exception: Propagates any download/build error from the model.
+                (Not caught in the current implementation.)
         """
         for models in self.__config.models.values():
             for model_config in models:

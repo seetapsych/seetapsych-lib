@@ -88,10 +88,20 @@ def max_select(detections: list[Detection]) -> int:
 
 
 def max_tracking(detections: list[Detection], pre_selection: Detection | None = None) -> tuple[int, bool]:
-    """
-    :param detections: current detections
-    :param pre_selection: previous detection
-    :return: target index and whether it was changed or not
+    """Select a detection using area + IoU-based temporal smoothing.
+
+    Prefers the previous selection when the current closest IoU neighbour is
+    above ``iou_threshold`` and its area is still within ``switch_ratio`` of
+    the largest box. Falls back to the largest detection otherwise.
+
+    Args:
+        detections: Current frame detections (xyxy + score).
+        pre_selection: Detection chosen in the previous frame, if any.
+
+    Returns:
+        A 2-tuple ``(index, changed)`` where ``index`` is the selected
+        position in ``detections`` (``-1`` if empty) and ``changed``
+        indicates whether the selection differs from ``pre_selection``.
     """
     iou_threshold = 0.3
     switch_ratio = 0.5

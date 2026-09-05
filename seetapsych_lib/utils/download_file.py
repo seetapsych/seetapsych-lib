@@ -123,21 +123,36 @@ def download_file(
     overwrite: bool = False,
     quiet: bool = False,
 ) -> str:
-    """
-    Download file from url to output path.
-    Notice: Only support FTP and HTTP/S link for now.
-    If download failed, exception will be raised.
-    :param url: URL to download
-    :param output: Path to download file or directory
-    :param md5: MD5 checksum
-    :param sha256: SHA256 checksum
-    :param buffer_size_bytes: Block size in bytes
-    :param max_retries: Maximum number of retries
-    :param retry_wait_seconds: Retry seconds
-    :param timeout_seconds: Timeout seconds
-    :param overwrite: Overwrite existing file
-    :param quiet: If true, suppress stdout and process bar
-    :return: Download file path, return None if download failed
+    """Download a file from a URL to a local path.
+
+    Dispatches to HTTP(S) or FTP implementations based on URL scheme.
+    Currently only ``http`` / ``https`` / ``ftp`` schemes are supported.
+
+    Note:
+        On download failure an exception is raised rather than returning
+        ``None`` despite the historical docstring claiming otherwise.
+
+    Args:
+        url: Full URL to download.
+        output: Destination file path, or an existing directory (the
+            basename is derived from the URL).
+        md5: Expected MD5 hex digest for integrity check; skipped if None.
+        sha256: Expected SHA-256 hex digest for integrity check; skipped
+            if None.
+        buffer_size_bytes: Read buffer size in bytes for streaming.
+        max_retries: Maximum number of retry attempts on transient errors.
+        retry_wait_seconds: Delay in seconds between consecutive retries.
+        timeout_seconds: Per-request socket/connection timeout in seconds.
+        overwrite: If True, overwrite an existing file; otherwise skip
+            re-download when the destination exists.
+        quiet: If True, suppress progress bar and informational output.
+
+    Returns:
+        Absolute path of the downloaded file.
+
+    Raises:
+        ValueError: For unsupported URL schemes.
+        Exception: Propagates checksum errors or transport failures.
     """
     parsed_url = urlparse(url)
     scheme = parsed_url.scheme.lower()
@@ -270,20 +285,19 @@ def download_ftp_endpoint(
     basename: str | None = None,
     quiet: bool = False,
 ):
-    """
-    Download file from FTP endpoint to local path.
+    """Download a file from an already-connected FTP client.
 
-    Features:
-    - Streaming download
-    - Progress bar via tqdm
-    - Automatic directory creation
+    Supports streaming transfer, progress display via ``tqdm``, and automatic
+    creation of missing local directories.
 
-    :param ftp: Connected FTP client
-    :param remote_path: Full remote file path (absolute or relative)
-    :param output_path: Local file path
-    :param buffer_size_bytes: Block size
-    :param basename: Name for progress bar display
-    :param quiet: Disable progress bar
+    Args:
+        ftp: A connected, authenticated :class:`FTP` instance.
+        remote_path: Remote file path (absolute or cwd-relative).
+        output_path: Local destination file path (not directory).
+        buffer_size_bytes: Transfer buffer size in bytes.
+        basename: Override the label shown in the progress bar. Defaults
+            to the ``output_path`` basename.
+        quiet: If True, suppress the progress bar entirely.
     """
 
     # Ensure local directory exists

@@ -349,9 +349,17 @@ def _resolve_entry_callable(
 
 
 def import_entry(entry: schema.Entry | None) -> tuple[Callable | None, str | None]:
-    """
-    :param entry:
-    :return: entry function and failed import package name if that's the reason
+    """Import the callable referenced by a config entry.
+
+    Args:
+        entry: Module/path entry describing the callable. ``None`` is
+            accepted and passed through as ``(None, None)``.
+
+    Returns:
+        A 2-tuple ``(callable, failed_package)``. On success the callable is
+        returned with ``failed_package=None``. On failure the callable is
+        ``None`` and ``failed_package`` contains the first Python module
+        name whose import failed (if import failure was the cause).
     """
     if entry is None:
         return entry, None

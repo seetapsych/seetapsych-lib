@@ -278,3 +278,13 @@ The following environment variables are supported:
 | SEETAPSYCH\_LOG\_LEVEL  | Change default log level. Could be `WARNING`, `INFO`, `DEBUG`, or an integer (e.g., `10`). |
 | SEETAPSYCH\_CACHE\_DIR  | Base directory for model cache. Models are cached under `<CACHE_DIR>/models`.              |
 | SEETAPSYCH\_CONFIG\_DIR | Base directory for config files. Config files are loaded from `<CONFIG_DIR>/configs`.      |
+
+## Development
+
+### Docstring Convention
+
+All code docstrings in this project follow the **Google Style** format (with `Args` / `Returns` / `Raises` sections). Refer to the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) for the complete specification.
+
+### Additional Development Instructions
+
+For local verification steps (lint, type check, tests, build), tag naming conventions, and the release pipeline, see [DEVELOPMENT.md](./DEVELOPMENT.md).
