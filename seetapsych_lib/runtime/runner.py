@@ -187,7 +187,7 @@ class Runner:
 
         Returns:
             The accumulated attribute report dictionary, including the
-            injected ``"time"`` and ``"frame_tick"`` metadata fields.
+            injected ``"timestamp"`` and ``"frame_tick"`` metadata fields.
 
         Raises:
             MissingInputModal: If ``data`` is missing any required modal
@@ -211,7 +211,7 @@ class Runner:
         reports = []
         updates = []
         report = {
-            "time": timestamp,
+            "timestamp": timestamp,
             "frame_tick": self.__frame_tick,
         }
 

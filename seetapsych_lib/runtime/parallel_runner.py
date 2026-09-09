@@ -458,7 +458,7 @@ class ParallelRunner:
             raise MissingInputModal(missing_modals)
 
         report = {
-            "time": timestamp,
+            "timestamp": timestamp,
             "frame_tick": self.__frame_tick,
         }
         self.__frame_tick += 1

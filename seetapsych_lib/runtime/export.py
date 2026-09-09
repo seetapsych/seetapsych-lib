@@ -164,7 +164,7 @@ def list2csv(contents: Iterable[Any], *, ignore_keys: list[str] | None = None) -
 
 def test():
     report = {
-        "time": 1770261549.652793,
+        "timestamp": 1770261549.652793,
         "frame_tick": 1,
         "face_detection": [
             {
