@@ -287,4 +287,4 @@ All code docstrings in this project follow the **Google Style** format (with `Ar
 
 ### Additional Development Instructions
 
-For local verification steps (lint, type check, tests, build), tag naming conventions, and the release pipeline, see [DEVELOPMENT.md](./DEVELOPMENT.md).
+For local verification steps (lint, type check, tests, build), tag naming conventions, and the release pipeline, see [DEVELOPMENT.md](https://github.com/seetapsych/seetapsych-lib/blob/main/DEVELOPMENT.md).
