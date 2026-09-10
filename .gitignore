@@ -110,3 +110,7 @@ __pycache__/
 *.wma
 *.m4a
 *.aiff
+
+# assets directory — whitelist all contents (supersedes per-type opt-in above)
+!/assets/
+!/assets/**
