@@ -21,6 +21,11 @@
 *.log
 .env
 
+# example / experiment result artifacts (exclude scripts)
+*_result.*
+!*_result.py
+!*_result.sh
+
 # generated files
 seetapsych_lib/_version.py
 
@@ -31,3 +36,77 @@ __pycache__/
 *.pyd
 *.so
 *$py.class
+
+# deep learning models / weight artifacts
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.h5
+*.hdf5
+*.pb
+*.onnx
+*.engine
+*.plan
+*.trt
+*.safetensors
+*.gguf
+*.ggml
+*.tflite
+*.pkl
+*.joblib
+*.keras
+
+# archives / compressed bundles
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tbz2
+*.tar.xz
+*.txz
+*.7z
+*.rar
+*.bz2
+*.gz
+*.xz
+*.lz4
+*.zst
+
+# images (opt-in via explicit `git add -f`)
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tif
+*.tiff
+*.webp
+*.gif
+*.heic
+*.heif
+*.ico
+*.pgm
+*.ppm
+
+# video / audio (opt-in via explicit `git add -f`)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.flv
+*.wmv
+*.mpg
+*.mpeg
+*.3gp
+*.m4v
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.opus
+*.wma
+*.m4a
+*.aiff
