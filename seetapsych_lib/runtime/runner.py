@@ -2,11 +2,17 @@
 
 import copy
 import time
-from collections import defaultdict
 from typing import Any
 
 from seetapsych_lib import api
 from seetapsych_lib.runtime.actions import load_package
+from seetapsych_lib.runtime.base_runner import (
+    BaseRunner,
+    MissingInputModal,
+    PipelineHasProblem,
+    PipelineUnsatisfied,
+    TimeSummary,
+)
 from seetapsych_lib.runtime.model import build_model
 from seetapsych_lib.runtime.pipeline import Pipeline
 from seetapsych_lib.utils.cuda import list_nvidia_devices
@@ -17,57 +23,11 @@ __all__ = [
     "PipelineHasProblem",
     "PipelineUnsatisfied",
     "MissingInputModal",
+    "TimeSummary",
 ]
 
 
-class PipelineHasProblem(Exception):
-    """Raised when the pipeline still has unresolved dependency problems."""
-
-
-class PipelineUnsatisfied(Exception):
-    """Raised when the pipeline has unsatisfied runtime prerequisites."""
-
-
-class MissingInputModal(Exception):
-    """Raised when a required input modal is not provided to ``run()``."""
-
-
-class TimeSummary:
-    """Simple running average of wall-clock times grouped by tag.
-
-    Each stored entry tracks (count, total_seconds); the reported average is
-    rounded to three decimals.
-    """
-
-    def __init__(self):
-        self.__summary: dict[str, list[float | int]] = defaultdict(lambda: [int(0), float(0)])
-
-    def add(self, tag: str, time_seconds: float):
-        """Record a new timing sample.
-
-        Args:
-            tag: Identifier for the measured operation.
-            time_seconds: Elapsed wall-clock time in seconds.
-        """
-        value = self.__summary[tag]
-        value[0] += 1
-        value[1] += time_seconds
-
-    def clear(self):
-        """Discard all recorded samples."""
-        self.__summary.clear()
-
-    def summary(self) -> dict[str, float]:
-        """Return per-tag average times.
-
-        Returns:
-            Mapping of ``tag`` to average elapsed time in seconds, rounded
-            to three decimal places.
-        """
-        return {tag: round(value[1] / value[0], 3) for tag, value in self.__summary.items()}
-
-
-class Runner:
+class Runner(BaseRunner):
     """Sequential pipeline executor.
 
     Instantiates each package from a resolved :class:`Pipeline`, caches the
@@ -176,7 +136,12 @@ class Runner:
         """Return the required input modal names for :meth:`run`."""
         return self.__inputs
 
-    def run(self, data: dict[str, Any] | Any, timestamp: float | None = None) -> dict[str, Any]:
+    def run(
+        self,
+        data: dict[str, Any] | Any,
+        timestamp: float | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Run inference on a single input frame.
 
         Args:
@@ -184,6 +149,9 @@ class Runner:
                 dict mapping modal names to their payloads.
             timestamp: Optional wall-clock timestamp for the frame. Defaults
                 to :func:`time.time` when omitted.
+            **kwargs: Extension parameters inherited from
+                :meth:`BaseRunner.run`; unused by the sequential
+                implementation.
 
         Returns:
             The accumulated attribute report dictionary, including the

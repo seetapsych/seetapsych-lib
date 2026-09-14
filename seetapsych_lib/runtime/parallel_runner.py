@@ -7,11 +7,16 @@ from typing import Any, Literal
 
 from seetapsych_lib import api, schema
 from seetapsych_lib.runtime.actions import load_package
+from seetapsych_lib.runtime.base_runner import (
+    BaseParallelRunner,
+    MissingInputModal,
+    PipelineHasProblem,
+    PipelineUnsatisfied,
+)
 from seetapsych_lib.runtime.model import build_model
 from seetapsych_lib.runtime.parallel.executor import Executor, ParallelExecutor
 from seetapsych_lib.runtime.parallel.future import Future, WritableFuture
 from seetapsych_lib.runtime.pipeline import Pipeline
-from seetapsych_lib.runtime.runner import MissingInputModal, PipelineHasProblem, PipelineUnsatisfied
 from seetapsych_lib.utils.cuda import list_nvidia_devices
 from seetapsych_lib.utils.logger import logger
 
@@ -258,7 +263,7 @@ class PackageExecutor(Executor):
         )
 
 
-class ParallelRunner:
+class ParallelRunner(BaseParallelRunner):
     """Parallel pipeline executor based on a dependency-aware thread pool.
 
     Builds a DAG of the pipeline packages, dispatches each node to a
@@ -416,6 +421,7 @@ class ParallelRunner:
         self,
         data: dict[str, Any] | Any,
         timestamp: float | None = None,
+        **kwargs: Any,
     ) -> Future[dict[str, Any]]:
         """Submit a frame for parallel inference and return a future.
 
@@ -428,6 +434,9 @@ class ParallelRunner:
                 dict mapping modal names to their payloads.
             timestamp: Optional wall-clock timestamp for the frame. Defaults
                 to :func:`time.time` when omitted.
+            **kwargs: Extension parameters inherited from
+                :meth:`BaseParallelRunner.run_async`; unused by the thread-
+                pool implementation.
 
         Returns:
             A :class:`Future` resolving to the accumulated attribute report.
@@ -482,17 +491,21 @@ class ParallelRunner:
         self,
         data: dict[str, Any] | Any,
         timestamp: float | None = None,
+        *,
         timeout: float | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Run inference on a single frame and wait for the result.
 
         Convenience wrapper equivalent to
-        ``run_async(data, timestamp).get(timeout=timeout)``.
+        ``run_async(data, timestamp, **kwargs).get(timeout=timeout)``.
 
         Args:
             data: Either a single payload or a modal-to-payload dict.
             timestamp: Optional wall-clock timestamp for the frame.
             timeout: Maximum seconds to wait. ``None`` blocks indefinitely.
+                Keyword-only per :meth:`BaseParallelRunner.run`.
+            **kwargs: Extension parameters forwarded to :meth:`run_async`.
 
         Returns:
             The accumulated attribute report dictionary.
@@ -502,7 +515,7 @@ class ParallelRunner:
             MissingInputModal: If required input modals are missing.
             TimeoutError: If the result is not ready within ``timeout``.
         """
-        return self.run_async(data, timestamp).get(timeout=timeout)
+        return self.run_async(data, timestamp, **kwargs).get(timeout=timeout)
 
     def reset(self):
         """Reset frame counter and broadcast ``reset`` to all package executors.

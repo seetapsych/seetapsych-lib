@@ -11,7 +11,7 @@ from seetapsych_lib import api
 
 class ExampleInstance(api.Instance):
     def __init__(self, model_path: str, device: api.Device | None):
-        time.sleep(1)
+        time.sleep(0.01)
 
         self.__model_path = model_path
         self.__device = device
@@ -80,7 +80,7 @@ class ExampleModel(api.Model):
         if self.exists():
             return self.__path
 
-        time.sleep(1)
+        time.sleep(0.01)
 
         example_model_cached = True
         return self.__path
