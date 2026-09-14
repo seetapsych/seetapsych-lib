@@ -114,3 +114,24 @@ __pycache__/
 # assets directory — whitelist all contents (supersedes per-type opt-in above)
 !/assets/
 !/assets/**
+
+# OS / editor junk
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+# Windows
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+# Linux (KDE/GNOME)
+.directory
+.Trash-*
+# Editors / IDEs
+.vscode/
+*.swp
+*.swo
+*~
