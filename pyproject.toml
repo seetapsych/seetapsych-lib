@@ -1,9 +1,8 @@
 [project]
 name = "seetapsych-lib"
 description = "A Computer Vision Toolkit for Face-based Psychological Measurement"
-readme = "README.md"
 requires-python = ">=3.10"
-dynamic = ["version"]
+dynamic = ["version", "readme"]
 license = { file = "LICENSE" }
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -147,11 +146,18 @@ source = "vcs"
 fallback-version = "0.0.0.dev0"
 tag-pattern = "^r(?P<version>[^-]+)$"
 
+[tool.hatch.metadata.hooks.custom]
+path = "tools/build_hooks.py"
+
 [tool.hatch.build.hooks.vcs]
 version-file = "seetapsych_lib/_version.py"
 
 [build-system]
-requires = ["hatchling>=1.26", "hatch-vcs>=0.4.0"]
+requires = [
+    "hatchling>=1.26",
+    "hatch-vcs>=0.4.0",
+    "tomli>=2.3.0; python_version < '3.11'",
+]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

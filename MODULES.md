@@ -1,5 +1,7 @@
 # Built-in Modules
 
+[简体中文](MODULES_CN.md) | English
+
 ## SelectFace
 
 > Select one target face from multi-face detection outputs for single-face downstream pipelines.

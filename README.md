@@ -1,24 +1,27 @@
 # SeetaPsych Lib
 
-> A Computer Vision Toolkit for Face-based Psychological Measurement
+> A Computer Vision Toolkit for Behavior-based Psychological Measurement
 
-[![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
+[简体中文](README_CN.md) | English
 
-SeetaPsych Lib is a Python-based computer vision toolkit for face-based psychological analysis, serving as the core library of the SeetaPsych project. It provides a modular Pipeline/Runner runtime that supports the composition and execution of custom algorithm modules, and ships with a quick-start WebUI for rapid onboarding and experimentation.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](pyproject.toml)
+[![License](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
+
+SeetaPsych Lib is a Python-based open-source computer vision toolkit for behavior-based psychological measurement, serving as the core library of the SeetaPsych project. It provides a modular Pipeline/Runner runtime that supports the composition and execution of custom algorithm modules, and ships with a quick-start WebUI for rapid onboarding and experimentation.
 
 ## Overview
 
 As the foundational library of the SeetaPsych ecosystem, its position within the broader open-source project matrix is illustrated in [Fig. 1](#figure-matrix).
 
 <div align="center" id="figure-matrix">
-  <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/matrix.png" width="840"/>
+  <img src="assets/matrix.png" width="840"/>
   <p><em><strong>Figure 1.</strong> Open source project matrix</em></p>
 </div>
 
 The project provides solutions for the following primary application scenarios, as summarized in [Fig. 2](#figure-usage).
 
 <div align="center" id="figure-usage">
-  <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/usage.png" width="640"/>
+  <img src="assets/usage.png" width="640"/>
   <p><em><strong>Figure 2.</strong> Target Use Cases</em></p>
 </div>
 
@@ -27,7 +30,7 @@ The project uses configuration files to describe the available algorithms and th
 [Fig. 3](#figure-attributes) illustrates how algorithms and attributes are described through configuration files (YML).
 
 <div align="center" id="figure-attributes">
-  <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/attributes.png" width="840"/>
+  <img src="assets/attributes.png" width="840"/>
   <p><em><strong>Figure 3.</strong> Examples of configuration files (YML) and their corresponding attributes</em></p>
 </div>
 
@@ -59,7 +62,7 @@ Each attribute may depend on one or more algorithm modules for computation.
 **The key capability of the framework is dependency-driven automation:** users only need to specify which attributes they want to obtain. Based on the requested attributes and their declared dependencies, the framework automatically resolves all required algorithm modules and assembles them into an optimized computation graph. A concrete example is shown in [Fig. 4](#figure-graph).
 
 <div align="center" id="figure-graph">
-  <img src="https://raw.githubusercontent.com/seetapsych/seetapsych-lib/main/assets/graph.png" width="640"/>
+  <img src="assets/graph.png" width="640"/>
   <p><em><strong>Figure 4.</strong> Example of a computation graph constructed from requested attributes</em></p>
 </div>
 
@@ -72,7 +75,15 @@ The example in [Fig. 4](#figure-graph) walks through a concrete dependency chain
 
 This dependency-based organization enables multiple attributes to share and reuse intermediate results within a single computation graph, avoiding redundant computation.
 
-For further details, refer to the following repositories:
+The built-in algorithm modules are implemented as separate subprojects. Each subproject ships one or more algorithm packages declared via `modules/*.yml` and registered in the global config registry. The available algorithm subprojects are:
+- [FaceHub](https://github.com/seetapsych/seetapsych-face-hub) — Face detection (RetinaFace/MediaPipe), 5-point landmarks, 468-point 3D face mesh, and ArcFace 512-dim face feature extraction.
+- [FaceEx](https://github.com/seetapsych/seetapsych-face-ex) — 280-point dense facial landmark prediction with optional two-pass refinement.
+- [Emo](https://github.com/seetapsych/seetapsych-emo) — Multi-task facial affect estimation: 16 action units, 7 categorical expressions, and valence-arousal dimensional affect.
+- [GazeScreen](https://github.com/seetapsych/seetapsych-gaze-screen) — Screen gaze coordinate estimation via AFFNet and TDGazeNet for desktop eye-tracking scenarios.
+- [GazeFollow](https://github.com/seetapsych/seetapsych-gaze-follow) — Multi-head detection, per-head scene gaze following, and dyadic social gaze relation classification.
+- [Hertz](https://github.com/seetapsych/seetapsych-hertz) — Contactless heart rate estimation via rPPG (TinyHR convolutional waveform predictor and AdaChrom chrominance analysis).
+
+For further details on shared schemas, attribute contracts, and the global module registry, refer to the following repositories:
 - [seetapsych-attributes](https://github.com/seetapsych/seetapsych-attributes)
 - [seetapsych-configs](https://github.com/seetapsych/seetapsych-configs)
 
@@ -265,7 +276,7 @@ if __name__ == "__main__":
 
 ## Built-in Modules
 
-This library also ships with built-in algorithm modules. See the full list and documentation in [MODULES.md](https://github.com/seetapsych/seetapsych-lib/blob/main/MODULES.md).
+This library also ships with built-in algorithm modules. See the full list and documentation in [MODULES.md](MODULES.md).
 
 ## Configuration
 
@@ -287,4 +298,4 @@ All code docstrings in this project follow the **Google Style** format (with `Ar
 
 ### Additional Development Instructions
 
-For local verification steps (lint, type check, tests, build), tag naming conventions, and the release pipeline, see [DEVELOPMENT.md](https://github.com/seetapsych/seetapsych-lib/blob/main/DEVELOPMENT.md).
+For local verification steps (lint, type check, tests, build), tag naming conventions, and the release pipeline, see [DEVELOPMENT.md](DEVELOPMENT.md).
