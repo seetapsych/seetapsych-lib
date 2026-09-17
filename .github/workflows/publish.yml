@@ -10,17 +10,17 @@ jobs:
     name: Pytest smoke gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
 
@@ -40,12 +40,12 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -77,17 +77,6 @@ jobs:
             echo "PYPI_PUBLISH=true" >> "$GITHUB_OUTPUT"
             echo "PRERELEASE=false" >> "$GITHUB_OUTPUT"
           fi
-        shell: bash
-
-      - name: Discover dist assets
-        id: assets
-        run: |
-          SDIST=$(ls dist/*.tar.gz | head -n1)
-          WHEEL=$(ls dist/*.whl | head -n1)
-          echo "SDIST=$SDIST" >> "$GITHUB_OUTPUT"
-          echo "WHEEL=$WHEEL" >> "$GITHUB_OUTPUT"
-          echo "SDIST_NAME=$(basename $SDIST)" >> "$GITHUB_OUTPUT"
-          echo "WHEEL_NAME=$(basename $WHEEL)" >> "$GITHUB_OUTPUT"
         shell: bash
 
       - name: Compose release body
@@ -132,43 +121,29 @@ jobs:
         shell: bash
 
       - name: Upload dist artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-artifacts-${{ steps.get_tag.outputs.TAG }}
           path: dist/
           if-no-files-found: error
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Create stable GitHub Release
+        if: steps.release_type.outputs.PRERELEASE == 'false'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.get_tag.outputs.TAG }}
-          release_name: Release ${{ steps.get_tag.outputs.VERSION }}
-          body: ${{ steps.release_body.outputs.BODY }}
-          draft: false
-          prerelease: ${{ steps.release_type.outputs.PRERELEASE }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.get_tag.outputs.TAG }}
+          VERSION: ${{ steps.get_tag.outputs.VERSION }}
+          BODY: ${{ steps.release_body.outputs.BODY }}
+        run: gh release create "$TAG" dist/* --title "Release $VERSION" --notes "$BODY"
 
-      - name: Upload sdist to GitHub Release
-        uses: actions/upload-release-asset@v1
+      - name: Create prerelease GitHub Release
+        if: steps.release_type.outputs.PRERELEASE == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.assets.outputs.SDIST }}
-          asset_name: ${{ steps.assets.outputs.SDIST_NAME }}
-          asset_content_type: application/gzip
-
-      - name: Upload wheel to GitHub Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.assets.outputs.WHEEL }}
-          asset_name: ${{ steps.assets.outputs.WHEEL_NAME }}
-          asset_content_type: application/zip
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.get_tag.outputs.TAG }}
+          VERSION: ${{ steps.get_tag.outputs.VERSION }}
+          BODY: ${{ steps.release_body.outputs.BODY }}
+        run: gh release create "$TAG" dist/* --title "Release $VERSION" --notes "$BODY" --prerelease
 
   pypi-publish:
     name: Publish to PyPI
@@ -184,7 +159,7 @@ jobs:
 
     steps:
       - name: Download dist artifacts from github-release job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: dist-artifacts-${{ github.ref_name }}
           path: dist
