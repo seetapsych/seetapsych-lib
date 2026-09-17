@@ -1,10 +1,10 @@
-# 内置模块
+# 内置算法模块
 
 简体中文 | [English](MODULES.md)
 
 ## SelectFace
 
-> 从多人脸检测输出中选择一个目标人脸，用于单人脸下游流水线。
+> 从多人脸检测结果中筛选一张目标人脸，供单人下游流水线使用。
 
 模块配置：[face_selection.yml](seetapsych_lib/modules/face_selection.yml)
 
@@ -12,16 +12,16 @@
 |---|---|---|
 | SelectFace | `face/selection`, `face/detection` | `face/detection` |
 
-**说明**：按最大面积或最大跟踪（带 PID 目标切换计数）策略从检测结果中选择一个人脸。
+**说明**：从人脸检测结果中按策略选取一张人脸，支持最大面积优先或最大跟踪优先（带 PID 目标切换计数机制）两种策略。
 
 **参数**
 
 | 名称 | 类型 | 默认值 | 可选值 | 说明与调优建议 |
 |---|---|---|---|---|
-| `selection_mode` | selection | `MAX_TRACKING` | `MAX_TRACKING`, `MAX` | 从多人脸中挑选的策略。`MAX_TRACKING` 加入时序稳定性，目标切换时递增 PID；`MAX` 每帧独立选取最大人脸。 |
+| `selection_mode` | selection | `MAX_TRACKING` | `MAX_TRACKING`, `MAX` | 多人脸筛选策略。`MAX_TRACKING` 引入时序稳定性，目标切换时 PID 计数器递增；`MAX` 则逐帧独立选取面积最大的人脸。 |
 
 **模型**：*(无)*
 
 **输出属性**
-- `face/selection` — [规格](https://github.com/seetapsych/seetapsych-attributes#faceselection)。
-- `face/detection` — [规格](https://github.com/seetapsych/seetapsych-attributes#facedetection)。
+- `face/selection` — [规格定义](https://github.com/seetapsych/seetapsych-attributes#faceselection)。
+- `face/detection` — [规格定义](https://github.com/seetapsych/seetapsych-attributes#facedetection)。
