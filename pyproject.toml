@@ -146,6 +146,12 @@ source = "vcs"
 fallback-version = "0.0.0.dev0"
 tag-pattern = "^r(?P<version>[^-]+)$"
 
+[tool.hatch.build]
+default-excludes = true
+exclude = [
+    ".github/",
+]
+
 [tool.hatch.metadata.hooks.custom]
 path = "tools/build_hooks.py"
 

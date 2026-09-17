@@ -99,17 +99,26 @@ def _is_relative_local_path(path: str) -> bool:
     return True
 
 
-def _resolve_relative_path(base_file: Path, rel_path: str) -> str:
+def _resolve_relative_path(base_file: Path, rel_path: str, repo_root: Path | None = None) -> str:
     """Resolve a relative path against the README location and return the repo-relative POSIX path.
 
     Args:
         base_file: Absolute path to the README file being processed.
-        rel_path: The relative path component (may include a trailing anchor).
+        rel_path: The relative path component (may include a trailing anchor / query).
+        repo_root: Absolute path to the repository root. When provided, targets
+            are resolved against *base_file.parent* and then made relative to
+            *repo_root* so callers always receive a repo-root-relative result,
+            even when the original ``../`` escapes the README's own directory.
 
     Returns:
         Repository-root-relative POSIX path without leading ``./`` or ``../``
-        escape markers. Preserves a trailing ``#anchor`` fragment when present.
+        escape markers. Preserves any trailing ``#anchor`` or ``?query``
+        fragments on the original *rel_path*.  ``../`` sequences are
+        normalised away via ``posixpath.normpath`` so final URLs never contain
+        `/branch/../` segments that browsers must reinterpret on the server.
     """
+    import posixpath
+
     anchor = ""
     if "#" in rel_path:
         rel_path, anchor = rel_path.split("#", 1)
@@ -121,14 +130,31 @@ def _resolve_relative_path(base_file: Path, rel_path: str) -> str:
         raw, query = rel_path.split("?", 1)
         query = "?" + query
 
-    resolved = (base_file.parent / raw).resolve()
-    root = base_file.parent
-    try:
-        repo_relative = resolved.relative_to(root)
-    except ValueError:
-        return rel_path
+    if repo_root is not None:
+        try:
+            resolved = (base_file.parent / raw).resolve(strict=False)
+            repo_relative = resolved.relative_to(repo_root.resolve(strict=False))
+        except ValueError:
+            # Target escapes the repo entirely (e.g. `../../out-of-repo`).
+            # Fall back to the raw input, normalised.
+            posix = posixpath.normpath(raw.replace("\\", "/"))
+            return posix + query + anchor
+        posix = posixpath.normpath(repo_relative.as_posix())
+        if posix == ".":
+            posix = ""
+        return posix + query + anchor
 
-    posix = repo_relative.as_posix()
+    resolved = (base_file.parent / raw).resolve(strict=False)
+    relative_root = base_file.parent
+    try:
+        repo_relative = resolved.relative_to(relative_root.resolve(strict=False))
+    except ValueError:
+        posix = posixpath.normpath(raw.replace("\\", "/"))
+        return posix + query + anchor
+
+    posix = posixpath.normpath(repo_relative.as_posix())
+    if posix == ".":
+        posix = ""
     return posix + query + anchor
 
 
@@ -202,8 +228,102 @@ def _build_url(owner: str, repo: str, branch: str, rel_path: str, root: Path | N
     return base + query + fragment
 
 
+def _find_matching_bracket(text: str, open_pos: int, open_char: str, close_char: str) -> int:
+    r"""Return the index of the matching *close_char* for a bracket starting at *open_pos*.
+
+    Tracks nested pairs of the same bracket type. Respects backslash escapes so
+    that ``\\]``/``\\)`` inside quoted text do not prematurely terminate a match.
+    Returns ``-1`` when the pair is unbalanced.
+
+    Args:
+        text: String to search inside.
+        open_pos: Index of the opening bracket in *text* (must equal *open_char*).
+        open_char: Opening bracket character (``[`` or ``(`` or ``<``).
+        close_char: Closing bracket character (``]`` or ``)`` or ``>``).
+
+    Returns:
+        Index of the matching closing bracket, or ``-1`` if unbalanced.
+    """
+    if open_pos < 0 or open_pos >= len(text) or text[open_pos] != open_char:
+        return -1
+    depth = 1
+    i = open_pos + 1
+    escaped = False
+    while i < len(text):
+        ch = text[i]
+        if escaped:
+            escaped = False
+            i += 1
+            continue
+        if ch == "\\":
+            escaped = True
+            i += 1
+            continue
+        if ch == open_char:
+            depth += 1
+        elif ch == close_char:
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+# ---------------------------------------------------------------------------
+# Simple, non-backtracking regex building blocks.
+# Every pattern below is intentionally "single-responsibility":
+#   * anchors locate a candidate's starting position (or an attribute prefix)
+#   * character classes are strictly negated sets with a clear terminator
+#     (e.g. [^"]* ends at the next `"`), guaranteeing zero ambiguity / no
+#     catastrophic-backtracking surface area.
+# ---------------------------------------------------------------------------
+_IMG_VIDEO_START_RE = re.compile(r"<\s*(img|video)\b", re.IGNORECASE)
+_SRC_ATTR_RE = re.compile(
+    r"""src\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""",
+    re.IGNORECASE,
+)
+_MD_LINK_START_RE = re.compile(r"!?\[")
+_AUTOLINK_START_RE = re.compile(r"<")
+
+
+def _parse_md_link_suffix(inner: str) -> tuple[str, str]:
+    """Split a Markdown link ``"target"`` or ``"target \"title\""`` into parts.
+
+    Args:
+        inner: Raw text between the parentheses of a ``[text](...)`` link.
+
+    Returns:
+        ``(target, title_suffix)`` where *title_suffix* is the original
+        whitespace + quoted title (e.g. ``' "My Title"'``) or ``""`` when no
+        title is present. The caller decides whether the *target* needs to be
+        rewritten; the title suffix is always preserved verbatim.
+    """
+    if not inner or inner[0].isspace():
+        return inner, ""
+    space_idx = -1
+    for j, c in enumerate(inner):
+        if c.isspace():
+            space_idx = j
+            break
+    if space_idx == -1:
+        return inner, ""
+    target = inner[:space_idx]
+    title_part = inner[space_idx:]
+    return target, title_part
+
+
 def _rewrite_html_attrs(content: str, owner: str, repo: str, branch: str, base_file: Path, root: Path) -> str:
-    """Rewrite ``src`` attributes on ``<img>`` and ``<video>`` tags outside code blocks.
+    """Rewrite relative ``src`` attributes on ``<img>`` and ``<video>`` tags.
+
+    Processing is split into two strictly separated layers to avoid any
+    backtracking-prone regex:
+
+    1. **Range anchor** — scan for ``<img`` / ``<video`` and find the matching
+       ``>`` (simple character search; HTML tags in Markdown READMEs never
+       contain unquoted ``>`` inside attribute values).
+    2. **Field extraction** — once a tag slice is isolated, run a small,
+       non-ambiguous regex to pull out ``src="..."`` / ``src='...'`` /
+       ``src=...`` and decide whether to rewrite.
 
     Args:
         content: Raw Markdown / HTML text.
@@ -211,44 +331,14 @@ def _rewrite_html_attrs(content: str, owner: str, repo: str, branch: str, base_f
         repo: Repository name.
         branch: Default branch name.
         base_file: Absolute path of the file being rewritten.
-        root: Absolute path of the project root (used for directory vs file
-            disambiguation when building GitHub URLs).
+        root: Absolute project root (for directory vs file disambiguation).
 
     Returns:
-        Content with relative ``src`` paths converted to absolute URLs.
-        Lines inside fenced code blocks (```` ``` ````), indented code blocks,
-        or inline code spans are left unchanged.
+        Content with relative ``src`` paths converted to absolute GitHub URLs.
+        Fenced code blocks, indented code blocks, and inline code spans are
+        preserved unchanged.
     """
-
-    def _replace_tag(match: re.Match[str]) -> str:
-        full_tag = match.group(0)
-        attr = match.group(1)
-        if match.group(2) is not None:
-            quote_char = '"'
-            value = match.group(2)
-        elif match.group(3) is not None:
-            quote_char = "'"
-            value = match.group(3)
-        else:
-            quote_char = '"'
-            value = match.group(4) or ""
-
-        if not _is_relative_local_path(value):
-            return full_tag
-
-        clean_value = value.strip()
-        repo_rel = _resolve_relative_path(base_file, clean_value)
-        new_url = _build_url(owner, repo, branch, repo_rel, root)
-        return full_tag.replace(
-            f"{attr}={quote_char}{value}{quote_char}",
-            f"{attr}={quote_char}{new_url}{quote_char}",
-        )
-
-    tag_pattern = re.compile(
-        r"<(?:img|video)\b[^>]*?\s(src)\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+))[^>]*>",
-        re.IGNORECASE,
-    )
-    code_span_pattern = re.compile(r"`[^`\n]*`")
+    code_span_re = re.compile(r"`[^`\n]*`")
 
     in_code_block = False
     rewritten_lines: list[str] = []
@@ -262,78 +352,276 @@ def _rewrite_html_attrs(content: str, owner: str, repo: str, branch: str, base_f
             rewritten_lines.append(line)
             continue
 
-        segments: list[str] = []
+        out: list[str] = []
         cursor = 0
-        for span in code_span_pattern.finditer(line):
-            segments.append(line[cursor : span.start()])
-            segments.append(span.group(0))
-            cursor = span.end()
+        for code_span in code_span_re.finditer(line):
+            segment = line[cursor : code_span.start()]
+            out.append(_rewrite_html_attrs_in_text(segment, owner, repo, branch, base_file, root))
+            out.append(code_span.group(0))
+            cursor = code_span.end()
         tail = line[cursor:]
-        tail = tag_pattern.sub(_replace_tag, tail)
-        segments.append(tail)
-        rewritten_lines.append("".join(segments))
+        out.append(_rewrite_html_attrs_in_text(tail, owner, repo, branch, base_file, root))
+        rewritten_lines.append("".join(out))
 
     return "".join(rewritten_lines)
+
+
+def _rewrite_html_attrs_in_text(text: str, owner: str, repo: str, branch: str, base_file: Path, root: Path) -> str:
+    """Rewrite img/video ``src`` attributes inside a single code-free segment.
+
+    Args:
+        text: A piece of a single Markdown line that contains no inline code
+            spans (code blocks are already filtered by the caller).
+        owner/repo/branch: GitHub coordinates for building absolute URLs.
+        base_file: Absolute path of the README being rewritten.
+        root: Absolute project root.
+
+    Returns:
+        Copy of *text* with relative ``src`` values on ``<img>``/``<video>``
+        tags converted to absolute GitHub URLs.
+    """
+    out: list[str] = []
+    pos = 0
+    n = len(text)
+    while pos < n:
+        match = _IMG_VIDEO_START_RE.search(text, pos)
+        if match is None:
+            out.append(text[pos:])
+            break
+        tag_start = match.start()
+        out.append(text[pos:tag_start])
+        close_idx = text.find(">", match.end())
+        if close_idx == -1:
+            out.append(text[tag_start:])
+            break
+        tag_slice = text[tag_start : close_idx + 1]
+        rebuilt = _maybe_rewrite_img_video_src(tag_slice, owner, repo, branch, base_file, root)
+        out.append(rebuilt)
+        pos = close_idx + 1
+    return "".join(out)
+
+
+def _maybe_rewrite_img_video_src(tag: str, owner: str, repo: str, branch: str, base_file: Path, root: Path) -> str:
+    """If ``tag`` has a relative ``src``, rewrite it; otherwise return unchanged.
+
+    The small ``_SRC_ATTR_RE`` regex is safe here because the match is bounded
+    inside a pre-isolated slice between ``<img...`` and ``>`` — even if the
+    pattern fails (e.g. malformed attribute quoting), it simply returns no
+    match and the tag is preserved verbatim. No catastrophic-backtracking
+    surface exists because each alternation ends at a distinct terminator
+    (``"``, ``'``, or a whitespace/``>``).
+    """
+    src_match = _SRC_ATTR_RE.search(tag)
+    if src_match is None:
+        return tag
+    value = (
+        src_match.group(1)
+        if src_match.group(1) is not None
+        else (src_match.group(2) if src_match.group(2) is not None else src_match.group(3) or "")
+    )
+    if not _is_relative_local_path(value.strip()):
+        return tag
+    repo_rel = _resolve_relative_path(base_file, value.strip(), root)
+    new_url = _build_url(owner, repo, branch, repo_rel, root)
+    # Reconstruct the exact original attribute span (preserve quote style)
+    full_match_start, full_match_end = src_match.span()
+    original_attr = src_match.group(0)
+    before_value = (
+        original_attr[: src_match.start(1) - src_match.start()]
+        if src_match.group(1) is not None
+        else (
+            original_attr[: src_match.start(2) - src_match.start()]
+            if src_match.group(2) is not None
+            else original_attr[: src_match.start(3) - src_match.start()]
+        )
+    )
+    quote_end_idx = (
+        src_match.end(1)
+        if src_match.group(1) is not None
+        else (src_match.end(2) if src_match.group(2) is not None else src_match.end(3))
+    )
+    after_value = original_attr[quote_end_idx - src_match.start() :]
+    new_attr = f"{before_value}{new_url}{after_value}"
+    return tag[:full_match_start] + new_attr + tag[full_match_end:]
 
 
 def _rewrite_markdown_links(content: str, owner: str, repo: str, branch: str, base_file: Path, root: Path) -> str:
     """Rewrite Markdown ``[text](target)`` link targets outside code regions.
 
+    The rewrite is performed in three stages to keep each regex tiny and
+    unambiguous:
+
+    1. **Anchor** — locate any ``[`` or ``![`` with ``_MD_LINK_START_RE``.
+    2. **Boundary** — use :func:`_find_matching_bracket` (explicit depth
+       counter, zero regex) to isolate the ``[text]`` portion and then the
+       following ``(target ["title"])`` portion.
+    3. **Split** — split the parenthesised content into target / title via a
+       plain character scan, then decide whether to rewrite based on
+       :func:`_is_relative_local_path`.
+
+    This avoids the catastrophic-backtracking failure mode of the previous
+    "one-regex-to-match-everything" approach while keeping the main loop
+    readable and free of character-level if/else chains.
+
     Args:
         content: Raw Markdown text.
-        owner: GitHub owner/organization name.
-        repo: Repository name.
-        branch: Default branch name.
+        owner/repo/branch: GitHub coordinates for building absolute URLs.
         base_file: Absolute path of the file being rewritten.
-        root: Absolute path of the project root.
+        root: Absolute project root.
 
     Returns:
-        Content with relative link targets converted to absolute URLs.
-        Fenced / indented code blocks and inline code spans are preserved.
+        Content with relative link targets converted to absolute GitHub URLs.
+        Fenced code blocks, indented code blocks, and inline code spans are
+        preserved unchanged.
     """
+    code_span_re = re.compile(r"`[^`\n]*`")
+
     in_code_block = False
-    lines = content.splitlines(keepends=True)
-    rewritten: list[str] = []
-
-    link_pattern = re.compile(r"(!?\[(?:[^\[\]()]+|\[[^\]]*\]|\([^)]*\))*\])\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-    code_span_pattern = re.compile(r"`[^`\n]*`")
-
-    for line in lines:
+    rewritten_lines: list[str] = []
+    for line in content.splitlines(keepends=True):
         stripped = line.lstrip()
         if stripped.startswith("```"):
             in_code_block = not in_code_block
-            rewritten.append(line)
+            rewritten_lines.append(line)
             continue
         if in_code_block or re.match(r"^( {4,}|\t)", line):
-            rewritten.append(line)
+            rewritten_lines.append(line)
             continue
 
-        def _replace(match: re.Match[str]) -> str:
-            prefix = match.group(1)
-            target = match.group(2)
-            suffix = match.group(0)[match.end(2) : match.end(0) - 1]
-
-            if not _is_relative_local_path(target):
-                return match.group(0)
-
-            repo_rel = _resolve_relative_path(base_file, target)
-            new_url = _build_url(owner, repo, branch, repo_rel, root)
-            return f"{prefix}({new_url}{suffix})"
-
-        segments: list[str] = []
+        out: list[str] = []
         cursor = 0
-        for span in code_span_pattern.finditer(line):
-            before = line[cursor : span.start()]
-            before = link_pattern.sub(_replace, before)
-            segments.append(before)
-            segments.append(span.group(0))
-            cursor = span.end()
+        for code_span in code_span_re.finditer(line):
+            segment = line[cursor : code_span.start()]
+            out.append(_rewrite_md_links_in_text(segment, owner, repo, branch, base_file, root))
+            out.append(code_span.group(0))
+            cursor = code_span.end()
         tail = line[cursor:]
-        tail = link_pattern.sub(_replace, tail)
-        segments.append(tail)
-        rewritten.append("".join(segments))
+        out.append(_rewrite_md_links_in_text(tail, owner, repo, branch, base_file, root))
+        rewritten_lines.append("".join(out))
 
-    return "".join(rewritten)
+    return "".join(rewritten_lines)
+
+
+def _rewrite_md_links_in_text(text: str, owner: str, repo: str, branch: str, base_file: Path, root: Path) -> str:
+    """Rewrite Markdown links inside a single code-free segment.
+
+    Handles three Markdown syntaxes on one pass:
+
+    1. **Standard inline links** — ``[text](target "title")`` /
+       ``![alt](src "title")``. The bracket portion is processed recursively so
+       that nested shapes such as ``[![alt](inner.png)](outer.mp4)`` result in
+       *both* targets being rewritten.
+    2. **Autolinks** — ``<https://example.com>`` / ``<relative/local/path>``
+       (CommonMark §4.7). Only relative-local autolinks whose target resolves
+       to an existing file on disk are rewritten; ``mailto:`` / ``<user@host>``
+       style e-mail autolinks and absolute-URL autolinks are left untouched.
+    3. **Bare ``<img>/<video>`` tags** are rewritten by an earlier pass
+       (:func:`_rewrite_html_attrs`) and are not processed here.
+
+    Args:
+        text: Piece of a single Markdown line without inline code spans.
+        owner/repo/branch: GitHub coordinates for building absolute URLs.
+        base_file: Absolute path of the README being rewritten.
+        root: Absolute project root.
+
+    Returns:
+        Copy of *text* with relative local links replaced by absolute GitHub
+        URLs. Non-matching constructs are preserved byte-for-byte.
+    """
+    out: list[str] = []
+    pos = 0
+    n = len(text)
+    base_dir = base_file.parent
+    while pos < n:
+        bracket_match = _MD_LINK_START_RE.search(text, pos)
+        autolink_match = _AUTOLINK_START_RE.search(text, pos)
+        bracket_idx = bracket_match.start() if bracket_match is not None else n
+        autolink_idx = autolink_match.start() if autolink_match is not None else n
+
+        if bracket_idx < autolink_idx:
+            # ------------------------------------------------------------------
+            # Case 1: Standard / image Markdown link `[text](target)`
+            # ------------------------------------------------------------------
+            anchor = bracket_match
+            bracket_start = anchor.end() - 1  # position of '['
+            bracket_end = _find_matching_bracket(text, bracket_start, "[", "]")
+            if bracket_end == -1:
+                out.append(text[pos : bracket_start + 1])
+                pos = bracket_start + 1
+                continue
+            if bracket_end + 1 >= n or text[bracket_end + 1] != "(":
+                out.append(text[pos : bracket_end + 1])
+                pos = bracket_end + 1
+                continue
+            paren_start = bracket_end + 1
+            paren_end = _find_matching_bracket(text, paren_start, "(", ")")
+            if paren_end == -1:
+                out.append(text[pos : paren_start + 1])
+                pos = paren_start + 1
+                continue
+            # Rewrite the bracket interior *recursively* — this handles nested
+            # `[![alt](inner.png)](outer.mp4)` / `[[ref](link)][ref]` shapes.
+            bracket_interior = text[bracket_start + 1 : bracket_end]
+            bracket_interior_rewritten = _rewrite_md_links_in_text(
+                bracket_interior, owner, repo, branch, base_file, root
+            )
+            # Rewrite the outer (target "title") segment.
+            out.append(text[pos : anchor.start()])
+            bang_prefix = "!" if anchor.group(0).startswith("!") else ""
+            prefix = f"{bang_prefix}[{bracket_interior_rewritten}]"
+            inner_paren = text[paren_start + 1 : paren_end]
+            target, title_suffix = _parse_md_link_suffix(inner_paren)
+            if _is_relative_local_path(target):
+                repo_rel = _resolve_relative_path(base_file, target, root)
+                new_url = _build_url(owner, repo, branch, repo_rel, root)
+                out.append(f"{prefix}({new_url}{title_suffix})")
+            else:
+                out.append(f"{prefix}({inner_paren})")
+            pos = paren_end + 1
+        elif autolink_idx < n:
+            # ------------------------------------------------------------------
+            # Case 2: Autolink `<...>` (CommonMark §4.7)
+            # ------------------------------------------------------------------
+            lt = autolink_idx
+            gt = text.find(">", lt + 1)
+            if gt == -1:
+                out.append(text[pos:])
+                break
+            body = text[lt + 1 : gt]
+            # Safeguard: Markdown autolinks must not contain whitespace.
+            if any(c.isspace() for c in body):
+                out.append(text[pos : lt + 1])
+                pos = lt + 1
+                continue
+            # Strip an optional `?query` / `#fragment` suffix before filesystem
+            # checks; we preserve the suffix exactly as-is after rewriting.
+            affix = ""
+            stripped_body = body
+            for sep in ("#", "?"):
+                if sep in stripped_body:
+                    cut = stripped_body.index(sep)
+                    affix = stripped_body[cut:] + affix
+                    stripped_body = stripped_body[:cut]
+            rewritten_body: str | None = None
+            if _is_relative_local_path(stripped_body) and "@" not in stripped_body:
+                candidate = (base_dir / stripped_body).resolve()
+                try:
+                    # Autolinks may target either files (assets, docs) or whole
+                    # directories (indicated by trailing `/` in the source).
+                    exists_on_disk = candidate.is_file() or candidate.is_dir()
+                except OSError:
+                    exists_on_disk = False
+                if exists_on_disk:
+                    repo_rel = _resolve_relative_path(base_file, stripped_body, root)
+                    rewritten_body = _build_url(owner, repo, branch, repo_rel, root)
+            out.append(text[pos:lt])
+            final_body = rewritten_body if rewritten_body is not None else body
+            out.append(f"<{final_body}{affix if rewritten_body is not None else ''}>")
+            pos = gt + 1
+        else:
+            out.append(text[pos:])
+            break
+    return "".join(out)
 
 
 def rewrite_readme_for_pypi(readme_path: Path, root: str) -> str:
