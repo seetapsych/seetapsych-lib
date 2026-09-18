@@ -284,6 +284,7 @@ _SRC_ATTR_RE = re.compile(
 )
 _MD_LINK_START_RE = re.compile(r"!?\[")
 _AUTOLINK_START_RE = re.compile(r"<")
+_CODE_SPAN_START_RE = re.compile(r"`")
 
 
 def _parse_md_link_suffix(inner: str) -> tuple[str, str]:
@@ -325,6 +326,10 @@ def _rewrite_html_attrs(content: str, owner: str, repo: str, branch: str, base_f
        non-ambiguous regex to pull out ``src="..."`` / ``src='...'`` /
        ``src=...`` and decide whether to rewrite.
 
+    Inline code spans are handled inside the per-line scanner to keep any HTML
+    fragments written inside `` ` ``…`` ` `` verbatim — see
+    :func:`_rewrite_html_attrs_in_text`.
+
     Args:
         content: Raw Markdown / HTML text.
         owner: GitHub owner/organization name.
@@ -338,8 +343,6 @@ def _rewrite_html_attrs(content: str, owner: str, repo: str, branch: str, base_f
         Fenced code blocks, indented code blocks, and inline code spans are
         preserved unchanged.
     """
-    code_span_re = re.compile(r"`[^`\n]*`")
-
     in_code_block = False
     rewritten_lines: list[str] = []
     for line in content.splitlines(keepends=True):
@@ -351,27 +354,18 @@ def _rewrite_html_attrs(content: str, owner: str, repo: str, branch: str, base_f
         if in_code_block or re.match(r"^( {4,}|\t)", line):
             rewritten_lines.append(line)
             continue
-
-        out: list[str] = []
-        cursor = 0
-        for code_span in code_span_re.finditer(line):
-            segment = line[cursor : code_span.start()]
-            out.append(_rewrite_html_attrs_in_text(segment, owner, repo, branch, base_file, root))
-            out.append(code_span.group(0))
-            cursor = code_span.end()
-        tail = line[cursor:]
-        out.append(_rewrite_html_attrs_in_text(tail, owner, repo, branch, base_file, root))
-        rewritten_lines.append("".join(out))
+        rewritten_lines.append(_rewrite_html_attrs_in_text(line, owner, repo, branch, base_file, root))
 
     return "".join(rewritten_lines)
 
 
 def _rewrite_html_attrs_in_text(text: str, owner: str, repo: str, branch: str, base_file: Path, root: Path) -> str:
-    """Rewrite img/video ``src`` attributes inside a single code-free segment.
+    """Rewrite img/video ``src`` attributes inside a single line, respecting code spans.
 
     Args:
-        text: A piece of a single Markdown line that contains no inline code
-            spans (code blocks are already filtered by the caller).
+        text: A piece of a single Markdown line. May contain inline code spans;
+            they are preserved verbatim and never scanned for ``<img>``/
+            ``<video>`` tag syntax.
         owner/repo/branch: GitHub coordinates for building absolute URLs.
         base_file: Absolute path of the README being rewritten.
         root: Absolute project root.
@@ -384,10 +378,22 @@ def _rewrite_html_attrs_in_text(text: str, owner: str, repo: str, branch: str, b
     pos = 0
     n = len(text)
     while pos < n:
-        match = _IMG_VIDEO_START_RE.search(text, pos)
-        if match is None:
-            out.append(text[pos:])
-            break
+        img_match = _IMG_VIDEO_START_RE.search(text, pos)
+        code_match = _CODE_SPAN_START_RE.search(text, pos)
+        img_idx = img_match.start() if img_match is not None else n
+        code_idx = code_match.start() if code_match is not None else n
+
+        if code_idx <= img_idx:
+            # Inline code span `...` — emit verbatim, skip interior.
+            backtick_close = text.find("`", code_idx + 1)
+            if backtick_close == -1:
+                out.append(text[pos:])
+                break
+            out.append(text[pos : backtick_close + 1])
+            pos = backtick_close + 1
+            continue
+
+        match = img_match
         tag_start = match.start()
         out.append(text[pos:tag_start])
         close_idx = text.find(">", match.end())
@@ -463,6 +469,11 @@ def _rewrite_markdown_links(content: str, owner: str, repo: str, branch: str, ba
     "one-regex-to-match-everything" approach while keeping the main loop
     readable and free of character-level if/else chains.
 
+    Inline code spans (`` `...` ``) are skipped *inside* the per-line scanner
+    so that Markdown links whose anchor text contains backtick-wrapped code
+    (e.g. ``[`foo.py`](foo.py)``) remain syntactically intact — a pre-split
+    on code spans would sever the ``[`` from the matching ``]``.
+
     Args:
         content: Raw Markdown text.
         owner/repo/branch: GitHub coordinates for building absolute URLs.
@@ -474,8 +485,6 @@ def _rewrite_markdown_links(content: str, owner: str, repo: str, branch: str, ba
         Fenced code blocks, indented code blocks, and inline code spans are
         preserved unchanged.
     """
-    code_span_re = re.compile(r"`[^`\n]*`")
-
     in_code_block = False
     rewritten_lines: list[str] = []
     for line in content.splitlines(keepends=True):
@@ -487,23 +496,13 @@ def _rewrite_markdown_links(content: str, owner: str, repo: str, branch: str, ba
         if in_code_block or re.match(r"^( {4,}|\t)", line):
             rewritten_lines.append(line)
             continue
-
-        out: list[str] = []
-        cursor = 0
-        for code_span in code_span_re.finditer(line):
-            segment = line[cursor : code_span.start()]
-            out.append(_rewrite_md_links_in_text(segment, owner, repo, branch, base_file, root))
-            out.append(code_span.group(0))
-            cursor = code_span.end()
-        tail = line[cursor:]
-        out.append(_rewrite_md_links_in_text(tail, owner, repo, branch, base_file, root))
-        rewritten_lines.append("".join(out))
+        rewritten_lines.append(_rewrite_md_links_in_text(line, owner, repo, branch, base_file, root))
 
     return "".join(rewritten_lines)
 
 
 def _rewrite_md_links_in_text(text: str, owner: str, repo: str, branch: str, base_file: Path, root: Path) -> str:
-    """Rewrite Markdown links inside a single code-free segment.
+    """Rewrite Markdown links inside a single line, respecting inline code spans.
 
     Handles three Markdown syntaxes on one pass:
 
@@ -518,8 +517,14 @@ def _rewrite_md_links_in_text(text: str, owner: str, repo: str, branch: str, bas
     3. **Bare ``<img>/<video>`` tags** are rewritten by an earlier pass
        (:func:`_rewrite_html_attrs`) and are not processed here.
 
+    Inline code spans (`` `...` ``) are detected on the fly and skipped in
+    full. This ensures anchors whose *display text* wraps content in
+    backticks (e.g. ``[`foo.py`](foo.py)``) remain parseable — a pre-split
+    strategy would sever ``[`` from the matching ``]``.
+
     Args:
-        text: Piece of a single Markdown line without inline code spans.
+        text: Piece of a single Markdown line. May contain inline code spans;
+            they are preserved verbatim and never scanned for link syntax.
         owner/repo/branch: GitHub coordinates for building absolute URLs.
         base_file: Absolute path of the README being rewritten.
         root: Absolute project root.
@@ -535,8 +540,22 @@ def _rewrite_md_links_in_text(text: str, owner: str, repo: str, branch: str, bas
     while pos < n:
         bracket_match = _MD_LINK_START_RE.search(text, pos)
         autolink_match = _AUTOLINK_START_RE.search(text, pos)
+        code_span_match = _CODE_SPAN_START_RE.search(text, pos)
         bracket_idx = bracket_match.start() if bracket_match is not None else n
         autolink_idx = autolink_match.start() if autolink_match is not None else n
+        code_span_idx = code_span_match.start() if code_span_match is not None else n
+
+        if code_span_idx <= bracket_idx and code_span_idx <= autolink_idx:
+            # ------------------------------------------------------------------
+            # Case 0: Inline code span `...` — emit verbatim, skip interior.
+            # ------------------------------------------------------------------
+            backtick_close = text.find("`", code_span_idx + 1)
+            if backtick_close == -1:
+                out.append(text[pos:])
+                break
+            out.append(text[pos : backtick_close + 1])
+            pos = backtick_close + 1
+            continue
 
         if bracket_idx < autolink_idx:
             # ------------------------------------------------------------------

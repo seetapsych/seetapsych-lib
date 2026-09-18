@@ -505,3 +505,261 @@ class TestSubdirReadme:
         assert f"<{_blob_url('assets/report.pdf')}>" in out, f"autolink ../assets/report.pdf not rewritten: {out!r}"
         # ``../assets/logo.png`` → media (raw URL).
         assert f"<{_raw_url('assets/logo.png')}>" in out, f"autolink ../assets/logo.png not rewritten: {out!r}"
+
+
+# ---------------------------------------------------------------------------
+# 8. Code-span link anchors: [`foo`](foo) must still rewrite `foo`
+# ---------------------------------------------------------------------------
+
+
+class TestCodeSpanInAnchor:
+    def test_backtick_wrapped_anchor_text_still_rewrites_target(
+        self, build_hooks_mod: types.ModuleType, fake_repo: Path
+    ):
+        """Regression: ``[`generate_readme.py`](tools/generate_readme.py)`` must
+        rewrite the parenthesised target even though the anchor text contains
+        backticks (a pre-split on code spans would break the link syntax)."""
+        src = "[`generate_readme.py`](tools/generate_readme.py)"
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        expected = _blob_url("tools/generate_readme.py")
+        assert expected in out, f"code-span anchor target not rewritten: {out!r}"
+        # Display text must remain byte-identical (including the backticks).
+        assert "[`generate_readme.py`]" in out, f"code-span anchor display text mangled: {out!r}"
+
+    def test_html_wrapped_code_span_anchor_rewrites(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        """The exact line emitted by seetapsych-attributes README generator —
+        HTML ``<sub>/<em>/<span>`` wrapper around a code-span anchor link."""
+        src = (
+            '<sub><em><span style="color:var(--fgColor-danger, #cf222e);">\\*</span>'
+            " Auto-generated. Do not edit directly. Source: "
+            "[`tools/generate_readme.py`](tools/generate_readme.py)</em></sub>"
+        )
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        expected = _blob_url("tools/generate_readme.py")
+        assert expected in out, (
+            f"HTML-wrapped code-span anchor target not rewritten.\nExpected URL: {expected}\nGot output: {out!r}"
+        )
+        # HTML structure must be preserved byte-for-byte around the rewrite.
+        assert '<sub><em><span style="color:var(--fgColor-danger, #cf222e);">\\*</span>' in out, (
+            f"HTML prefix mangled: {out!r}"
+        )
+        assert "[`tools/generate_readme.py`]" in out, f"code-span anchor display text mangled: {out!r}"
+        assert "</em></sub>" in out, f"HTML suffix mangled: {out!r}"
+
+    def test_code_span_anchor_with_image_still_rewrites_outer(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        """Nested image inside a code-span anchor: outer link + inner image
+        targets must both rewrite, and code-span display text survives."""
+        src = "[![`chart` inside code alt](assets/chart.svg)](docs/install.md)"
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert _raw_url("assets/chart.svg") in out, f"inner image not rewritten: {out!r}"
+        assert _blob_url("docs/install.md") in out, f"outer target not rewritten: {out!r}"
+        assert "![`chart` inside code alt]" in out, f"code-span inside img alt mangled: {out!r}"
+
+    def test_code_span_anchor_preserves_quoted_title(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        """Quoted title suffix must survive alongside code-span anchor text."""
+        src = '[`quickstart.txt`](quickstart.txt "open the quickstart guide")'
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert _blob_url("quickstart.txt") in out, f"code-span anchor target not rewritten: {out!r}"
+        assert '"open the quickstart guide"' in out, f"quoted title lost: {out!r}"
+        assert "[`quickstart.txt`]" in out, f"code-span display text mangled: {out!r}"
+
+    def test_standalone_code_span_not_confused_as_anchor(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        """A lone `` `[not](a link)` `` inside a code span must not trigger
+        any rewrite attempt; the surrounding real link still rewrites."""
+        src = "`[trick](assets/logo.png)` and real [logo](assets/logo.png)."
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        # Code span content is byte-preserved.
+        assert "`[trick](assets/logo.png)`" in out, f"standalone code span mangled: {out!r}"
+        # Real link after the code span is rewritten.
+        assert _raw_url("assets/logo.png") in out, f"real link after code span not rewritten: {out!r}"
+
+
+# ---------------------------------------------------------------------------
+# 9. Corpus-derived gap coverage: real constructs found in project READMEs
+#    that were not explicitly exercised by earlier tests.
+# ---------------------------------------------------------------------------
+
+
+class TestHtmlATagNeverRewritten:
+    """Build hooks only rewrite ``<img>``/``<video>`` ``src`` attributes.
+    ``<a href=...>`` must be preserved byte-for-byte even when the href is a
+    resolvable local relative path. This is by design: markdown links already
+    cover the textual link surface area, and the HTML scanner must not grow a
+    second, separate href-rewrite path without a deliberate spec change."""
+
+    def test_a_tag_with_relative_href_preserved(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        src = 'See <a href="docs/install.md">the install guide</a> for details.'
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        # href value must NOT be rewritten; surrounding text untouched.
+        assert '<a href="docs/install.md">' in out, f"<a href= relative was mangled: {out!r}"
+        assert "github.com" not in out or _blob_url("docs/install.md") not in out, f"<a href= must not rewrite: {out!r}"
+
+    def test_a_tag_with_absolute_href_preserved(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        src = (
+            'Credits: <a href="https://scholar.google.com/citations?user=AAAAAAA">'
+            "Google Scholar</a> and "
+            '<a href="https://vipl.ict.ac.cn/en/index.html">VIPL</a>.'
+        )
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert '<a href="https://scholar.google.com/citations?user=AAAAAAA">' in out, (
+            f"absolute <a href= scholar mangled: {out!r}"
+        )
+        assert '<a href="https://vipl.ict.ac.cn/en/index.html">' in out, f"absolute <a href= vipl mangled: {out!r}"
+
+    def test_bare_a_name_id_anchor_preserved(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        """seetapsych-attributes README emits 186 bare ``<a id="...">`` as
+        section anchors; they must not be touched and surrounding markdown
+        links on the same line must still rewrite."""
+        src = (
+            '<a id="facedetection"></a>\n'
+            "## Face Detection\n"
+            "Then read [install](docs/install.md) next to it.\n"
+            '<a id="properties/face_detection/items"></a>'
+        )
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert '<a id="facedetection"></a>' in out, f"a#id opening mangled: {out!r}"
+        assert '<a id="properties/face_detection/items"></a>' in out, f"a#id with slashes in id mangled: {out!r}"
+        # Neighbouring markdown link must still rewrite.
+        assert _blob_url("docs/install.md") in out, f"nearby md link not rewritten: {out!r}"
+
+
+class TestHtmlImgQuoteStyles:
+    """HTML ``<img src=...>`` supports " | ' | bare quoting styles.
+    Earlier tests covered double-quote fully; single-quote was only tested on
+    ``<video>``. Fill the gap so ``<img>`` has explicit parity across all
+    three attribute quoting variants."""
+
+    def test_img_single_quoted_src_rewrites(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        src = "<div><img src='assets/logo.png' alt='logo'/></div>"
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert _raw_url("assets/logo.png") in out, f"single-quoted <img src= not rewritten: {out!r}"
+        # Opening/closing tag structure unchanged.
+        assert out.startswith("<div><img src=") and out.endswith("'/></div>"), (
+            f"single-quoted tag shape mangled: {out!r}"
+        )
+
+    def test_img_unquoted_src_rewrites(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        src = "Logo: <img src=assets/logo.png alt=logo height=32> done."
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert _raw_url("assets/logo.png") in out, f"unquoted <img src= not rewritten: {out!r}"
+        assert "height=32>" in out, f"following unquoted attribute mangled: {out!r}"
+
+    def test_img_nonexistent_relative_src_still_rewritten(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        """MD-inline / HTML-img branches deliberately rewrite a relative-style
+        target even when the pointed-to file is absent on disk. PyPI-packaged
+        READMEs still need the URL to resolve to the repo branch on GitHub so
+        readers can click through regardless of the local tree state. The
+        existence-check guards only apply to the ``<autolink>`` branch."""
+        src = "<img src=\"nope/one.png\"> <img src='nope/two.png'> <img src=nope/three.png>"
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert _raw_url("nope/one.png") in out, f"nonexistent double-quoted relative <img src> not rewritten: {out!r}"
+        assert _raw_url("nope/two.png") in out, f"nonexistent single-quoted relative <img src> not rewritten: {out!r}"
+        assert _raw_url("nope/three.png") in out, f"nonexistent unquoted relative <img src> not rewritten: {out!r}"
+
+
+class TestHtmlVideoRelativeRewrites:
+    """Earlier ``<video>`` coverage only hit absolute-URL preservation and
+    single-quoted parsing. Corpus only contains an absolute ``<video src=``
+    so the local-relative code path was implicitly dead on real data. Add
+    explicit local rewrites so the behaviour stays spec-aligned."""
+
+    def test_video_local_mp4_routes_to_raw_url(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        demo = fake_repo / "assets" / "demo.mp4"
+        try:
+            demo.parent.mkdir(parents=True, exist_ok=True)
+            demo.write_bytes(b"")
+            src = '<video src="assets/demo.mp4" controls autoplay></video>'
+            out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        finally:
+            demo.unlink(missing_ok=True)
+        assert _raw_url("assets/demo.mp4") in out, f"video local src not routed to /raw/: {out!r}"
+        # Attribute order + controls + autoplay preserved.
+        assert " controls autoplay>" in out, f"video extra attrs mangled: {out!r}"
+
+    def test_video_nonexistent_relative_src_still_rewritten(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        """Mirror ``<video>`` branch also rewrites relative-style targets even when the
+        local file is missing — see
+        ``test_img_nonexistent_relative_src_still_rewritten."""
+        src = "<video src='assets/missing.mp4' controls></video>"
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert _raw_url("assets/missing.mp4") in out, f"nonexistent relative <video src> not rewritten: {out!r}"
+
+
+class TestDeepRelativePathResolution:
+    """Real corpus (hertz README) contains nested paths like
+    ``website/public/media/affiliations/southeast-university.png`` — three
+    levels deep, no leading ``./``. Make sure resolve-before-rewrite honours
+    those, and that nonexistent deeply-nested lookalikes are preserved."""
+
+    def test_existing_deeply_nested_media_rewrites(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        logo = fake_repo / "website" / "public" / "media" / "affiliations" / "ict-cas.png"
+        try:
+            logo.parent.mkdir(parents=True, exist_ok=True)
+            logo.write_bytes(b"")
+            src = (
+                '<img src="website/public/media/affiliations/ict-cas.png" alt="ICT">'
+                " plus [policy](website/public/media/affiliations/ict-cas.png)."
+            )
+            out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        finally:
+            logo.unlink(missing_ok=True)
+            # prune empty parent dirs only if we created them and they're now empty
+            for p in (
+                logo.parent,
+                logo.parent.parent,
+                logo.parent.parent.parent,
+                logo.parent.parent.parent.parent,
+            ):
+                try:
+                    p.rmdir()
+                except OSError:
+                    pass
+        # <img src> of .png → /raw/; markdown link of .png → /raw/ too.
+        assert _raw_url("website/public/media/affiliations/ict-cas.png") in out, (
+            f"deeply nested img not rewritten: {out!r}"
+        )
+
+    def test_nonexistent_deeply_nested_relative_path_still_rewritten(
+        self, build_hooks_mod: types.ModuleType, fake_repo: Path
+    ):
+        """Deeply nested relative paths behave the same as flat ones: a path
+        that *looks* relative is rewritten even when absent on disk."""
+        src = 'Broken: <img src="website/public/media/bogus.png"> as [link](website/public/media/bogus.png).'
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        target = _raw_url("website/public/media/bogus.png")
+        assert target in out, f"nonexistent deeply-nested relative <img src> not rewritten: {out!r}"
+        # Markdown inline link points at .png → /raw/ URL too (MEDIA_EXTENSION matched).
+        assert out.count(target) == 2, (
+            f"img+md inline pair both should rewrite to same /raw/ URL; count={out.count(target)}: {out!r}"
+        )
+
+
+class TestHtmlCloseTagNotMistakenForAutolink:
+    """Corpus (seetapsych-lib / seetapsych-attributes READMEs) contains
+    thousands of HTML closing tags like ``</a>``, ``</strong>``, ``</em>``,
+    ``</p>``, ``</div>``, ``</code>``. A naive ``<...>`` autolink regex could
+    match them; the build hook must never treat them as path autolinks and
+    must leave them byte-identical."""
+
+    def test_html_close_tags_preserved_and_neighbour_links_still_rewrite(
+        self, build_hooks_mod: types.ModuleType, fake_repo: Path
+    ):
+        src = (
+            "<p>Intro.</p> "
+            "<em>Important:</em> see <code>config</code> section, "
+            "ref <a id=x></a> then read [install](docs/install.md)."
+        )
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        for tag in ("<p>", "</p>", "<em>", "</em>", "<code>", "</code>", "<a id=x></a>"):
+            assert tag in out, f"HTML tag {tag!r} mangled: {out!r}"
+        # Neighbouring markdown link must still rewrite normally.
+        assert _blob_url("docs/install.md") in out, f"md link near HTML tags not rewritten: {out!r}"
+
+    def test_close_shapes_never_routed_to_blob_or_raw(self, build_hooks_mod: types.ModuleType, fake_repo: Path):
+        """None of the close-tag lookalikes should be touched."""
+        src = "</a> </strong> </em> </p> </div> </code> </span> </sub> </em></sub>"
+        out = _rewrite(build_hooks_mod, src, fake_repo / "README.md", fake_repo)
+        assert out == src, f"close tags were mangled: {out!r}"
+        assert f"{_REPO_OWNER}/" not in out or ("staging" not in out and "github" not in out), (
+            f"a close tag was rewritten into a GitHub URL: {out!r}"
+        )
