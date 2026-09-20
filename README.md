@@ -6,8 +6,12 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](pyproject.toml)
 [![License](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
+[![arXiv](https://img.shields.io/badge/arXiv-2609.19719-b31b1b.svg?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2609.19719)
+[![PDF](https://img.shields.io/badge/PDF-Download-red.svg?logo=adobeacrobatreader&logoColor=white)](https://arxiv.org/pdf/2609.19719)
 
 SeetaPsych Lib is a Python-based open-source computer vision toolkit for behavior-based psychological measurement, serving as the core library of the SeetaPsych project. It provides a modular Pipeline/Runner runtime that supports the composition and execution of custom algorithm modules, and ships with a quick-start WebUI for rapid onboarding and experimentation.
+
+A technical report on SeetaPsych is published on [arXiv](https://arxiv.org/abs/2609.19719) ([PDF](https://arxiv.org/pdf/2609.19719)).
 
 ## Overview
 

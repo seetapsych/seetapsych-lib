@@ -6,8 +6,12 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](pyproject.toml)
 [![License](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
+[![arXiv](https://img.shields.io/badge/arXiv-2609.19719-b31b1b.svg?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2609.19719)
+[![PDF](https://img.shields.io/badge/PDF-Download-red.svg?logo=adobeacrobatreader&logoColor=white)](https://arxiv.org/pdf/2609.19719)
 
 SeetaPsych Lib 是 SeetaPsych 项目的核心库，基于 Python 构建，面向基于行为的心理测量场景。它提供一套模块化的 Pipeline / Runner 运行时框架，支持灵活组合与执行自定义算法模块，并内置开箱即用的 WebUI，便于快速上手与实验探索。
+
+SeetaPsych 的技术报告已发布在 [arXiv](https://arxiv.org/abs/2609.19719)（[PDF](https://arxiv.org/pdf/2609.19719)）。
 
 ## 概述
 
