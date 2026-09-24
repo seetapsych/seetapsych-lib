@@ -2173,26 +2173,36 @@ def initialize(args: Args):
 def parse_args() -> Args:
     parser = argparse.ArgumentParser(description="SeetaPsych WebUI via Streamlit.")
 
-    parser.add_argument("--dirs", nargs="+", type=str, default=[], help="Load modules from dirs in factory.")
+    parser.add_argument("--dirs", nargs="+", type=str, default=[], help="Directories to scan for module files")
 
-    parser.add_argument("--files", nargs="+", type=str, default=[], help="Load modules from local files in factory.")
+    parser.add_argument("--files", nargs="+", type=str, default=[], help="Module files to load, given by path")
 
-    parser.add_argument("--urls", nargs="+", type=str, default=[], help="Load modules from urls in factory.")
+    parser.add_argument("--urls", nargs="+", type=str, default=[], help="URLs of remote module files to load")
 
-    parser.add_argument("--disable-builtin", action="store_true", help="Diable load builtin modules.")
+    parser.add_argument("--disable-builtin", action="store_true", help="Disable loading builtin modules")
 
-    parser.add_argument("--disable-default", action="store_true", help="Diable load default modules.")
+    parser.add_argument("--disable-default", action="store_true", help="Disable loading default modules")
 
-    parser.add_argument("--cache-dir", type=str, default=None, help="Cache dir to store models.")
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default=None,
+        help="Directory to store cached models (default: system cache dir)",
+    )
 
     parser.add_argument(
         "--upload-dir",
         type=str,
         default=None,
-        help=("Directory to store uploaded files (default: upload subdirectory in current working directory)"),
+        help=("Directory to store uploaded files (default: 'seetapsych-webui/upload' under the system temp dir)"),
     )
 
-    parser.add_argument("--log", type=str, default=None, help="string or int, like DEBUG, INFO, WARNING or 10")
+    parser.add_argument(
+        "--log",
+        type=str,
+        default=None,
+        help="Log level name or number, e.g. DEBUG, INFO, WARNING or 10",
+    )
 
     return cast(Args, cast(object, parser.parse_args()))
 

@@ -536,29 +536,29 @@ def main():
 
     install_parser = subparsers.add_parser(
         "install",
-        help="Install configuration file",
+        help="Install a config file into the default config directory",
     )
     install_parser.set_defaults(func=install_config)
     install_parser.add_argument(
         "path",
         type=Path,
-        help="Configuration file in toml/yaml/json",
+        help="Config file in toml/yaml/json",
     )
 
     uninstall_parser = subparsers.add_parser(
         "uninstall",
-        help="Uninstall configuration file",
+        help="Uninstall a config file",
     )
     uninstall_parser.set_defaults(func=uninstall_config)
     uninstall_parser.add_argument(
         "path",
         type=Path,
-        help="Configuration file in toml/yaml/json",
+        help="Config file in toml/yaml/json",
     )
 
     download_parser = subparsers.add_parser(
         "download",
-        help="Download and install all configs from seetapsych_configs",
+        help="Download and install all published configs",
     )
     download_parser.set_defaults(func=download_configs)
     download_parser.add_argument(
@@ -570,7 +570,7 @@ def main():
 
     show_parser = subparsers.add_parser(
         "show",
-        help="Show configuration files",
+        help="Show installed configs",
     )
     show_parser.set_defaults(func=show_configs)
     show_parser.add_argument(
@@ -582,13 +582,17 @@ def main():
 
     setup_parser = subparsers.add_parser(
         "setup",
-        help="Cache current configs models",
+        help="Install dependencies declared by installed configs",
+        description="Install dependencies declared by installed configs. "
+        "Optional: dependencies are also installed on demand at runtime.",
     )
     setup_parser.set_defaults(func=setup_configs)
 
     cache_parser = subparsers.add_parser(
         "cache",
-        help="Cache current configs models",
+        help="Download and cache models used by installed configs",
+        description="Download and cache models used by installed configs. "
+        "Optional: models are also downloaded on demand at runtime.",
     )
     cache_parser.set_defaults(func=cache_models)
 
