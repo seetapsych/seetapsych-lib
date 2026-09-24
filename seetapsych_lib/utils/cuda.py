@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import codecs
+import locale
 import platform
 import subprocess
 
@@ -8,6 +10,26 @@ import pynvml
 __all__ = [
     "list_nvidia_devices",
 ]
+
+
+def _decode_wmic_output(raw: bytes) -> str:
+    """Decode WMIC table output, including redirected UTF-16 output.
+
+    Args:
+        raw: Captured WMIC stdout.
+
+    Returns:
+        Table text decoded using its BOM, UTF-16LE header, or UTF-8 with a
+        locale fallback for legacy single-byte and multibyte output.
+    """
+    if raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return raw.decode("utf-16", errors="replace")
+    if b"N\x00a\x00m\x00e\x00" in raw[:64]:
+        return raw.decode("utf-16-le", errors="replace")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode(locale.getpreferredencoding(False), errors="replace")
 
 
 def list_nvidia_devices() -> list[str]:
@@ -42,7 +64,7 @@ def list_nvidia_devices() -> list[str]:
             try:
                 output = subprocess.check_output(["nvidia-smi", "--list-gpus"], stderr=subprocess.STDOUT)
                 # Output format: "GPU 0: NVIDIA GeForce RTX 3090 (UUID: ...)"
-                lines = output.decode("utf-8", errors="ignore").strip().split("\n")
+                lines = output.decode("utf-8", errors="replace").strip().split("\n")
                 for line in lines:
                     if "GPU" in line and ":" in line:
                         # Extract name between ":" and "("
@@ -59,7 +81,7 @@ def list_nvidia_devices() -> list[str]:
                 output = subprocess.check_output(
                     "wmic path win32_VideoController get name", shell=True, stderr=subprocess.STDOUT
                 )
-                lines = output.decode("gbk", errors="ignore").strip().split("\n")
+                lines = _decode_wmic_output(output).splitlines()
                 for line in lines:
                     line = line.strip()
                     # Filter header and empty lines, look for NVIDIA keyword
@@ -73,7 +95,7 @@ def list_nvidia_devices() -> list[str]:
             # Method A: Try nvidia-smi
             try:
                 output = subprocess.check_output(["nvidia-smi", "--list-gpus"], stderr=subprocess.STDOUT)
-                lines = output.decode("utf-8", errors="ignore").strip().split("\n")
+                lines = output.decode("utf-8", errors="replace").strip().split("\n")
                 for line in lines:
                     if "GPU" in line and ":" in line:
                         name = line.split(":")[1].split("(")[0].strip()
@@ -86,7 +108,7 @@ def list_nvidia_devices() -> list[str]:
             # Method B: Linux specific fallback using lspci (Hardware level check)
             try:
                 output = subprocess.check_output("lspci | grep -i nvidia", shell=True, stderr=subprocess.STDOUT)
-                devices = output.decode("utf-8", errors="ignore").strip().split("\n")
+                devices = output.decode("utf-8", errors="replace").strip().split("\n")
                 for device in devices:
                     if device:
                         gpu_names.append(device.strip())

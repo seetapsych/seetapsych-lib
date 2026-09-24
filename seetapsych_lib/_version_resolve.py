@@ -21,6 +21,7 @@ Bad tags (ignored by the hatchling VCS version source):
 
 from __future__ import annotations
 
+import locale
 import re
 import subprocess
 from pathlib import Path
@@ -52,19 +53,38 @@ def _package_root() -> Path:
     return Path(__file__).resolve().parent
 
 
-def _run_git(*args: str) -> Optional[str]:
+def _run_git(*args: str, encoding: str | None = None) -> Optional[str]:
+    """Run a Git command in the package directory and capture text output.
+
+    Args:
+        *args: Git subcommand and arguments.
+        encoding: Known stdout encoding. When omitted, try UTF-8 and the system
+            encoding strictly, then replace invalid UTF-8 sequences. Specify
+            this for commands whose output uses another encoding.
+
+    Returns:
+        Decoded stdout with surrounding whitespace stripped, or None on failure
+        or empty stdout. Stderr is discarded. Binary output is not preserved.
+    """
     try:
         completed = subprocess.run(
             ["git", "-C", str(_package_root()), *args],
-            capture_output=True,
-            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             check=False,
         )
+        if completed.returncode != 0 or not completed.stdout:
+            return None
+        if encoding is not None:
+            return completed.stdout.decode(encoding, errors="replace").strip()
+        for candidate in ("utf-8", locale.getpreferredencoding(False)):
+            try:
+                return completed.stdout.decode(candidate).strip()
+            except UnicodeDecodeError:
+                continue
+        return completed.stdout.decode("utf-8", errors="replace").strip()
     except (OSError, ValueError):
         return None
-    if completed.returncode != 0 or not completed.stdout:
-        return None
-    return completed.stdout.strip()
 
 
 def _strip_tag_prefix(raw: str) -> str:

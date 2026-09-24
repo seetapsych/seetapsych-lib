@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import codecs
 import copy
 import ensurepip
 import importlib
@@ -39,13 +40,40 @@ def _get_locale_encoding() -> str:
         return locale.getpreferredencoding(False)
 
 
-def _decode_stderr(raw: bytes) -> str:
-    for enc in (_get_locale_encoding(), "utf-8"):
+def _decode_stderr(raw: bytes, encoding: str | None = None) -> str:
+    """Decode captured diagnostics without discarding undecodable bytes.
+
+    Args:
+        raw: Complete captured output.
+        encoding: Known source encoding. When absent, try UTF-8 and the locale
+            strictly before replacing invalid UTF-8 sequences.
+
+    Returns:
+        Decoded diagnostic text.
+    """
+    if encoding is not None:
+        return raw.decode(encoding, errors="replace")
+    for enc in ("utf-8", _get_locale_encoding()):
         try:
-            return raw.decode(encoding=enc, errors="replace")
-        except Exception:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
             continue
-    return ""
+    return raw.decode("utf-8", errors="replace")
+
+
+def _python_output_env() -> tuple[dict[str, str], str]:
+    """Prepare a Python child's environment with a known pipe encoding.
+
+    Returns:
+        Environment copy and source encoding. Explicit PYTHONIOENCODING codecs
+        are preserved; an unspecified codec defaults to UTF-8 in the child only.
+    """
+    env = os.environ.copy()
+    encoding, separator, errors = env.get("PYTHONIOENCODING", "").partition(":")
+    if not encoding:
+        encoding = "utf-8"
+        env["PYTHONIOENCODING"] = encoding + separator + errors
+    return env, encoding
 
 
 def safe_which(cmd: str | os.PathLike[Any], path: str | os.PathLike[Any] | None = None) -> str | None:
@@ -100,12 +128,15 @@ def get_uv_version(uv_path: str) -> str | None:
     """
     Get the version of uv by calling 'uv --version'.
 
+    Args:
+        uv_path: Path to the uv executable.
+
     Returns:
         Version string if successful, otherwise None.
     """
     try:
-        result = subprocess.run([uv_path, "--version"], capture_output=True, text=True, check=True)
-        return result.stdout.strip()
+        result = subprocess.run([uv_path, "--version"], capture_output=True, check=True)
+        return result.stdout.decode("utf-8", errors="replace").strip()
     except Exception:
         return None
 
@@ -118,8 +149,9 @@ def get_pip_version() -> str | None:
         Version string if successful, otherwise None.
     """
     try:
-        result = subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, text=True, check=True)
-        return result.stdout.strip()
+        env, encoding = _python_output_env()
+        result = subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, env=env, check=True)
+        return result.stdout.decode(encoding, errors="replace").strip()
     except Exception:
         return None
 
@@ -189,13 +221,19 @@ def unsatisfied_requirements(module: schema.ModuleSpec) -> list[str]:
     return unsatisfied
 
 
-def package_manager() -> tuple[list[str], dict[str, str]]:
+def package_manager() -> tuple[str, list[str], dict[str, str]]:
+    """Select uv or pip, bootstrapping pip when neither is available.
+
+    Returns:
+        Manager name, command prefix, and default environment variables.
+        The name identifies the manager independently of its executable or flags.
+    """
     # check uv
     uv_exe = find_uv()
     if uv_exe:
         uv_version = get_uv_version(uv_exe)
         logger.info(f"Using package manager: {uv_version}")
-        return [uv_exe, "pip"], {"UV_TORCH_BACKEND": "auto"}
+        return "uv", [uv_exe, "pip"], {"UV_TORCH_BACKEND": "auto"}
 
     # check pip
     from importlib.util import find_spec
@@ -205,7 +243,7 @@ def package_manager() -> tuple[list[str], dict[str, str]]:
         ensurepip.bootstrap()
 
     logger.info(f"Using package manager: {get_pip_version()}")
-    return [sys.executable, "-m", "pip"], {}
+    return "pip", [sys.executable, "-m", "pip"], {}
 
 
 def _filter_applicable_requirements(requirements: list[str]) -> list[str]:
@@ -222,24 +260,61 @@ def _filter_applicable_requirements(requirements: list[str]) -> list[str]:
     return applicable
 
 
-def _tee_pipe(src: IO[bytes], dst: io.TextIOBase, buf: io.BytesIO):
+def _tee_pipe(src: io.BufferedIOBase, dst: IO[str] | None, buf: io.BytesIO, encoding: str = "utf-8") -> None:
+    """Forward available stderr chunks while retaining all bytes for diagnostics.
+
+    Args:
+        src: Buffered binary pipe, closed when reading finishes.
+        dst: Live output stream. Missing or closed streams allow capture only.
+        buf: Capture buffer, left open for the caller.
+        encoding: Source encoding, independent of the destination's encoding.
+    """
     dst_buf = getattr(dst, "buffer", None)
-    if dst_buf is None:
-        return
-    dst_flush = dst.flush
-    while True:
-        chunk = src.read(65536)
-        if not chunk:
-            break
-        dst_buf.write(chunk)
-        buf.write(chunk)
-        dst_flush()
-    src.close()
+    dst_encoding = getattr(dst, "encoding", None)
+    decoder = None
+    encoder = None
+    transcode = dst_encoding is not None and codecs.lookup(dst_encoding).name != codecs.lookup(encoding).name
+    if dst is not None and (dst_buf is None or transcode):
+        decoder = codecs.getincrementaldecoder(encoding)(errors="replace")
+        if dst_buf is not None and dst_encoding is not None:
+            encoder = codecs.getincrementalencoder(dst_encoding)(errors="backslashreplace")
+    with src:
+        while True:
+            # read1 does not wait to fill the chunk or require a newline.
+            chunk = src.read1(65536)
+            buf.write(chunk)
+            if dst is not None:
+                try:
+                    if decoder is not None:
+                        text = decoder.decode(chunk, final=not chunk)
+                        if encoder is not None and dst_buf is not None:
+                            dst_buf.write(encoder.encode(text, final=not chunk))
+                        else:
+                            dst.write(text)
+                    elif dst_buf is not None:
+                        dst_buf.write(chunk)
+                    dst.flush()
+                except (OSError, ValueError):
+                    # Keep draining the pipe even if the output destination closes.
+                    dst = None
+            if not chunk:
+                break
 
 
 def install_requirements(
     requirements: list[str], *, index_url: str | None = None, trusted_host: str | bool | None = None
-):
+) -> None:
+    """Install applicable requirements with live output and captured stderr.
+
+    Args:
+        requirements: PEP 508 requirement strings; inapplicable markers are skipped.
+        index_url: Optional package index URL.
+        trusted_host: Host to trust, or True to use the index URL's hostname.
+
+    Raises:
+        RuntimeError: Installation fails. Nonzero exits include captured stderr
+            and the exit code; stdout is inherited and is not captured.
+    """
     if not requirements:
         return
 
@@ -248,7 +323,7 @@ def install_requirements(
         logger.info(f"All requirements filtered out by environment markers, nothing to install: {requirements}")
         return
 
-    pm_cmd, pm_default_env = package_manager()
+    pm_name, pm_cmd, pm_default_env = package_manager()
     cmd: list[str] = [*pm_cmd, "install"] + applicable_reqs
     if index_url:
         cmd += ["--index-url", index_url]
@@ -262,8 +337,15 @@ def install_requirements(
         else:
             cmd += ["--trusted-host", trusted_host]
 
-    proc_env = os.environ.copy()
+    stderr_encoding = "utf-8"
     applied_env: list[str] = []
+    if pm_name == "pip":
+        # Align pip's output encoding with our decoder to avoid platform-dependent garbling.
+        proc_env, stderr_encoding = _python_output_env()
+        if proc_env.get("PYTHONIOENCODING") != os.environ.get("PYTHONIOENCODING"):
+            applied_env.append(f"PYTHONIOENCODING={proc_env['PYTHONIOENCODING']}")
+    else:
+        proc_env = os.environ.copy()
     for key, value in pm_default_env.items():
         existing = proc_env.get(key, "")
         if not existing:
@@ -285,26 +367,28 @@ def install_requirements(
         )
 
         stderr_buf = io.BytesIO()
-        tee_thread = threading.Thread(target=_tee_pipe, args=(proc.stderr, sys.stderr, stderr_buf), daemon=True)
+        tee_thread = threading.Thread(
+            target=_tee_pipe, args=(proc.stderr, sys.stderr, stderr_buf, stderr_encoding), daemon=True
+        )
         tee_thread.start()
 
         returncode = proc.wait()
         tee_thread.join()
 
-        if returncode != 0:
-            stderr_bytes = stderr_buf.getvalue()
-            stderr = _decode_stderr(stderr_bytes)
-            msg = f"Failed to install requirements {' '.join(requirements)} (exit code {returncode}):\n{stderr}"
-            logger.error(msg)
-            raise RuntimeError(msg)
     except FileNotFoundError as e:
         msg = f"Python executable not found: {sys.executable}"
         logger.error(msg)
         raise RuntimeError(msg) from e
     except Exception as e:
-        msg = f"Failed to execute uv pip or pip install {' '.join(requirements)}: {e}"
+        msg = f"Failed to execute {pm_name} install {' '.join(requirements)}: {e}"
         logger.error(msg)
         raise RuntimeError(msg) from e
+
+    if returncode != 0:
+        stderr = _decode_stderr(stderr_buf.getvalue(), stderr_encoding)
+        msg = f"Failed to install requirements {' '.join(requirements)} (exit code {returncode}):\n{stderr}"
+        logger.error(msg)
+        raise RuntimeError(msg)
 
 
 def install_module_requirements(
