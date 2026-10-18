@@ -270,7 +270,26 @@ def test_install_requirements_passes_indexes(
     monkeypatch.setattr(actions, "package_manager", lambda: (pm_name, ["installer"], {}))
     proc = Mock(stderr=io.BytesIO(), wait=Mock(return_value=0))
     popen = Mock(return_value=proc)
-    monkeypatch.setattr(actions.subprocess, "Popen", popen)
+    real_popen = subprocess.Popen
+
+    def run_child(cmd: str | list[str], **kwargs: Any) -> Any:
+        """Mock installation without intercepting platform discovery subprocesses.
+
+        Args:
+            cmd: Installer command or an unrelated subprocess command.
+            **kwargs: Subprocess options.
+
+        Returns:
+            Mock installer process or a real subprocess.
+        """
+        if isinstance(cmd, list) and cmd[:2] == ["installer", "install"]:
+            return popen(cmd, **kwargs)
+        return real_popen(cmd, **kwargs)
+
+    monkeypatch.setattr(actions.subprocess, "Popen", run_child)
+    probe = subprocess.run([sys.executable, "-c", "print('platform probe')"], capture_output=True, check=True)
+    assert probe.stdout.strip() == b"platform probe"
+    popen.assert_not_called()
     requirements = ["example-package>=1", "skipped-package; python_version < '2'"]
 
     actions.install_requirements(requirements, index_url=index_url, extra_index_urls=extra_index_urls)
@@ -280,6 +299,7 @@ def test_install_requirements_passes_indexes(
         expected += ["--index-url", index_url]
     for url in extra_index_urls or []:
         expected += ["--extra-index-url", url]
+    assert popen.call_count == 1
     assert popen.call_args.args[0] == expected
 
 
