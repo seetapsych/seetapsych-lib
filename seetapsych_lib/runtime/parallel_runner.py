@@ -3,6 +3,7 @@
 import copy
 import time
 from dataclasses import dataclass
+from multiprocessing.context import BaseContext
 from typing import Any, Literal
 
 from seetapsych_lib import api, schema
@@ -264,7 +265,7 @@ class PackageExecutor(Executor):
 
 
 class ParallelRunner(BaseParallelRunner):
-    """Parallel pipeline executor based on a dependency-aware thread pool.
+    """Parallel pipeline executor based on dependency-aware worker processes.
 
     Builds a DAG of the pipeline packages, dispatches each node to a
     :class:`PackageExecutor` scheduled by a :class:`ParallelExecutor`, and
@@ -279,6 +280,7 @@ class ParallelRunner(BaseParallelRunner):
         *,
         cache_dir: str | None = None,
         profile: bool = False,
+        mp_context: BaseContext | None = None,
     ):
         """Initialize a ParallelRunner.
 
@@ -289,6 +291,12 @@ class ParallelRunner(BaseParallelRunner):
 
         The empty-key ``""`` or underscore ``"_"`` entry in a device dict is
         treated as the fallback global device.
+
+        Workers default to spawn on every platform, independently of the
+        application's global start method. Protect application startup with
+        ``if __name__ == "__main__"`` and use importable, picklable configuration.
+        Models are initialized inside workers; host-only registrations and
+        monkeypatches are not inherited by spawned interpreters.
 
         Args:
             pipeline: A solved and satisfied Pipeline configuration.
@@ -307,6 +315,9 @@ class ParallelRunner(BaseParallelRunner):
             cache_dir: Override the model cache directory.
             profile: When True, record per-executor timings exposed via
                 :meth:`time_summary`.
+            mp_context: Optional multiprocessing context for all worker resources.
+                Defaults to a local spawn context. CUDA workers require spawn
+                or a CUDA-clean forkserver; fork is not a safe CUDA override.
 
         Raises:
             PipelineHasProblem: If ``pipeline`` still has unresolved
@@ -388,7 +399,7 @@ class ParallelRunner(BaseParallelRunner):
         if not satisfied:
             raise PipelineUnsatisfied(unsatisfaction)
 
-        parallel_executor = ParallelExecutor(profile=profile)
+        parallel_executor = ParallelExecutor(profile=profile, mp_context=mp_context)
 
         package_nodes = build_graph(pipeline.config.packages)
         node_executor_ids: dict[PackageNode, int] = {}
@@ -435,8 +446,7 @@ class ParallelRunner(BaseParallelRunner):
             timestamp: Optional wall-clock timestamp for the frame. Defaults
                 to :func:`time.time` when omitted.
             **kwargs: Extension parameters inherited from
-                :meth:`BaseParallelRunner.run_async`; unused by the thread-
-                pool implementation.
+                :meth:`BaseParallelRunner.run_async`; unused by this implementation.
 
         Returns:
             A :class:`Future` resolving to the accumulated attribute report.

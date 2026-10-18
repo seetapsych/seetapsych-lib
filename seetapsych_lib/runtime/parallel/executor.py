@@ -10,6 +10,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
 from multiprocessing import synchronize as sc
+from multiprocessing.context import BaseContext
 from typing import Any, Callable, Literal, Optional, cast
 
 from seetapsych_lib.runtime.parallel.future import Future, WritableFuture
@@ -22,9 +23,10 @@ __all__ = [
 
 
 class Executor(ABC):
-    """
-    The parallel executor in sub process. Created in host process,
-    `init` and `run` are executed in sub process.
+    """Worker created in the host and initialized in a child process.
+
+    Implementations must be importable and picklable with the default spawn
+    context. Create models and native resources in ``init``, not in the host.
     """
 
     @abstractmethod
@@ -260,10 +262,25 @@ class GatherExecutor(Executor):
 
 
 class ParallelExecutor:
-    def __init__(self, profile: bool = False):
-        self.__stop_event = mp.Event()
-        self.__health_queue: "mp.Queue[Any]" = mp.Queue()
-        self.__time_queue: "mp.Queue[Any]" = mp.Queue()
+    """Dependency-aware process executor with a local multiprocessing context."""
+
+    def __init__(self, profile: bool = False, *, mp_context: BaseContext | None = None):
+        """Create an executor without changing the application's start method.
+
+        Args:
+            profile: Whether to collect per-worker inference timings.
+            mp_context: Context used for all processes, queues, and events.
+                Defaults to ``multiprocessing.get_context("spawn")`` on every
+                platform. CUDA workers require spawn or a CUDA-clean forkserver.
+
+        Notes:
+            The application entry point must be safe to import in a child
+            interpreter. Host-only global registrations are not inherited.
+        """
+        self.__context = mp.get_context("spawn") if mp_context is None else mp_context
+        self.__stop_event = self.__context.Event()
+        self.__health_queue: "mp.Queue[Any]" = self.__context.Queue()
+        self.__time_queue: "mp.Queue[Any]" = self.__context.Queue()
 
         self.__id = 1  # 0 for input, -1 for output
         self.__nodes: dict[int, NodeSpec] = {}
@@ -276,11 +293,12 @@ class ParallelExecutor:
         self.__action_queues: dict[int, mp.Queue] = {}
 
         self.__started = False
+        self.__disposed = False
         self.__processes: dict[int, mp.Process] = {}
         self.__watch_process_threads: list[threading.Thread] = []
         self.__monitor_threads: list[threading.Thread] = []
 
-        self.__final_queue: "mp.Queue[Any]" = mp.Queue()
+        self.__final_queue: "mp.Queue[Any]" = self.__context.Queue()
         self.__final_output: NodeSpec = NodeSpec(
             name="__output__",
             inputs=self.__output_queues,
@@ -331,7 +349,7 @@ class ParallelExecutor:
 
         # create queue for link
         for link in self.__links:
-            q: "mp.Queue[Any]" = mp.Queue()
+            q: "mp.Queue[Any]" = self.__context.Queue()
             self.__queues[link] = q
 
             if link[0] == 0:
@@ -349,7 +367,7 @@ class ParallelExecutor:
         output_ids = [i for (i, n) in self.__nodes.items() if i > 0 and not n.outputs]
         for output_id in output_ids:
             link = (output_id, -1)
-            q = mp.Queue()
+            q = self.__context.Queue()
             self.__links.append(link)
             self.__queues[link] = q
             self.__output_queues.append(q)
@@ -460,8 +478,6 @@ class ParallelExecutor:
             self.__futures.clear()
 
     def _clear(self):
-        self.__stop_event.clear()
-
         self.__processes.clear()
         self.__watch_process_threads.clear()
         self.__monitor_threads.clear()
@@ -473,20 +489,44 @@ class ParallelExecutor:
         return self.__time_summary.summary()
 
     def start(self):
-        if self.__started:
-            raise RuntimeError("cannot start a running parallel executor")
+        """Start workers once and wait for initialization.
+
+        Raises:
+            RuntimeError: If startup was already attempted or initialization fails.
+            Exception: If a worker cannot be serialized or started. Previously
+                started workers are stopped before the exception is propagated.
+        """
+        if self.__started or self.__disposed:
+            raise RuntimeError("cannot restart a parallel executor")
+
+        self.__started = True
+        try:
+            self._start_workers()
+        except BaseException:
+            self.dispose()
+            raise
+
+    def _start_workers(self):
+        """Launch the compiled graph and its host-side monitor threads."""
 
         self._compile()
 
         # the output node has already in self.__nodes
         for i, spec in self.__nodes.items():
-            p = mp.Process(
+            p = self.__context.Process(
                 target=process_node_main,
                 name=f"seetapsych:{spec.name}",
                 args=(spec,),
                 daemon=False,
             )
-            p.start()
+            try:
+                p.start()
+            except BaseException:
+                if p.pid is not None:
+                    self.__processes[i] = p
+                else:
+                    p.close()
+                raise
             self.__processes[i] = p
 
         # watch process exit
@@ -528,13 +568,8 @@ class ParallelExecutor:
         self.__dispatch_threads.append(thread_dispatch)
 
         # use probe check initialize ready
-        try:
-            if not self.probe():
-                raise RuntimeError("run probe failed after start")
-        except RuntimeError:
-            self.dispose()
-            self._clear()
-            raise
+        if not self.probe():
+            raise RuntimeError("run probe failed after start")
 
     def probe(self) -> bool:
         sync_id = self.__sync_id
@@ -597,9 +632,11 @@ class ParallelExecutor:
         """Send graceful shutdown signal to all worker processes.
 
         Enqueues a :data:`MessageType.STOP` message on every worker input
-        queue, the final aggregator queue, and closes auxiliary queues so threads
-        exit cleanly after draining their pending work.
+        queue and the final aggregator queue, and wakes auxiliary monitors.
+        Calling this after disposal is a no-op.
         """
+        if self.__disposed:
+            return
         self.__stop_event.set()
 
         stop_msg = Message(
@@ -649,6 +686,8 @@ class ParallelExecutor:
             wait_seconds: Grace period for workers to drain before
                 ``terminate`` is issued. Defaults to ``1`` second.
         """
+        if self.__disposed:
+            return
         if wait_seconds is None:
             wait_seconds = 1
 
@@ -671,20 +710,28 @@ class ParallelExecutor:
                 dead = False
                 p.terminate()
 
-        if dead:
-            return
+        if not dead:
+            # then join wait process receive signal and handle it
+            wait()
 
-        # then join wait process receive signal and handle it
-        wait()
+            for p in self.__processes.values():
+                if p.is_alive():
+                    p.kill()
 
-        for p in self.__processes.values():
-            if p.is_alive():
-                p.kill()
+            # finally join wait process killed
+            for p in self.__processes.values():
+                p.join()
 
-        # finally join wait process killed
-        for p in self.__processes.values():
-            p.join()
+        for thread in self.__watch_process_threads + self.__monitor_threads + self.__dispatch_threads:
+            if thread is not threading.current_thread():
+                thread.join()
 
+        queues = [*self.__queues.values(), self.__final_queue, self.__health_queue, self.__time_queue]
+        for q in queues:
+            # Failed startup can leave queues without readers; do not wait for their feeders.
+            q.cancel_join_thread()
+            q.close()
+        self.__disposed = True
         self._clear()
 
 

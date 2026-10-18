@@ -14,6 +14,7 @@ with the echo payload defined in ``seetapsych_lib.example.example``.
 from __future__ import annotations
 
 import io
+import multiprocessing as mp
 
 # ---------------------------------------------------------------------------
 # Speed hacks: replace the example module's ``time`` binding with a proxy that
@@ -329,6 +330,16 @@ class TestRunner:
 
 
 class TestParallelRunner:
+    @pytest.mark.parametrize("method", mp.get_all_start_methods())
+    def test_explicit_context(self, solved_pipeline: Pipeline, method: str) -> None:
+        """Runner forwards the chosen context through real package initialization."""
+        runner = ParallelRunner(solved_pipeline, device="cpu", mp_context=mp.get_context(method))
+        try:
+            frame = _dummy_frame()
+            _assert_example_report(runner.run(frame, timeout=10), frame, frame_tick=1)
+        finally:
+            runner.dispose()
+
     def test_inherits_base_parallel_runner(self, parallel_runner_profiled: ParallelRunner) -> None:
         assert isinstance(parallel_runner_profiled, BaseParallelRunner)
         assert isinstance(parallel_runner_profiled, BaseRunner)
