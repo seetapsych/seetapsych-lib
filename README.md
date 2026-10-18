@@ -176,6 +176,12 @@ seetapsych-manager cache
 The `setup` and `cache` commands can be skipped.
 When you use the WebUI or call the library programmatically later, `seetapsych-lib` can install dependencies and download necessary models on demand.
 
+For `setup`, `--index-url` sets the primary package index; `--extra-index-url` adds an extra index and is repeatable.
+
+```sh
+seetapsych-manager setup --index-url https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
 ## Public Resources
 
 The default modules installed with `seetapsych-lib` are published and maintained at <https://github.com/seetapsych/seetapsych-configs>.

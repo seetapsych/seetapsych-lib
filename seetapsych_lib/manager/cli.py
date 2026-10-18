@@ -71,7 +71,11 @@ class ShowArgs(Protocol):
 
 
 class SetupArgs(Protocol):
-    pass
+    @property
+    def index_url(self) -> str | None: ...
+
+    @property
+    def extra_index_urls(self) -> list[str] | None: ...
 
 
 class CacheArgs(Protocol):
@@ -425,8 +429,13 @@ def show_configs(args: argparse.Namespace):
     print("\n".join(lines))
 
 
-def setup_configs(args: argparse.Namespace):
-    _ = cast(SetupArgs, cast(object, args))
+def setup_configs(args: argparse.Namespace) -> None:
+    """Install dependencies for installed configs with optional index overrides.
+
+    Args:
+        args: Parsed setup options, including primary and additional package indexes.
+    """
+    param = cast(SetupArgs, cast(object, args))
 
     entries = _iter_default_modules()
     total = len(entries)
@@ -448,7 +457,7 @@ def setup_configs(args: argparse.Namespace):
             continue
 
         try:
-            install_module_requirements(m)
+            install_module_requirements(m, index_url=param.index_url, extra_index_urls=param.extra_index_urls)
             success += 1
             logger.info("Dependencies installed successfully.")
         except Exception as e:
@@ -587,6 +596,17 @@ def main():
         "Optional: dependencies are also installed on demand at runtime.",
     )
     setup_parser.set_defaults(func=setup_configs)
+    setup_parser.add_argument(
+        "--index-url",
+        help="Override the primary package index URL for dependency installation",
+    )
+    setup_parser.add_argument(
+        "--extra-index-url",
+        dest="extra_index_urls",
+        action="append",
+        metavar="URL",
+        help="Add a package index URL; repeat to use multiple additional indexes",
+    )
 
     cache_parser = subparsers.add_parser(
         "cache",

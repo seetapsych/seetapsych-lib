@@ -175,6 +175,12 @@ seetapsych-manager cache
 
 `setup` 与 `cache` 命令并非必须执行。在后续使用 WebUI 或以编程方式调用时，`seetapsych-lib` 会根据实际需要自动安装依赖并下载模型。
 
+`setup` 可通过 `--index-url` 指定主包源，通过 `--extra-index-url` 添加额外包源（可重复指定）。
+
+```sh
+seetapsych-manager setup --index-url https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
 ## 公共资源
 
 随 `seetapsych-lib` 一同安装的默认模块定义，由 <https://github.com/seetapsych/seetapsych-configs> 仓库发布与维护。

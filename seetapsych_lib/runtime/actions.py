@@ -302,13 +302,19 @@ def _tee_pipe(src: io.BufferedIOBase, dst: IO[str] | None, buf: io.BytesIO, enco
 
 
 def install_requirements(
-    requirements: list[str], *, index_url: str | None = None, trusted_host: str | bool | None = None
+    requirements: list[str],
+    *,
+    index_url: str | None = None,
+    extra_index_urls: list[str] | None = None,
+    trusted_host: str | bool | None = None,
 ) -> None:
     """Install applicable requirements with live output and captured stderr.
 
     Args:
         requirements: PEP 508 requirement strings; inapplicable markers are skipped.
-        index_url: Optional package index URL.
+        index_url: Package index URL overriding the installer's configured primary index.
+        extra_index_urls: Additional package indexes, passed in the supplied order.
+            Unspecified index options retain the installer's configuration.
         trusted_host: Host to trust, or True to use the index URL's hostname.
 
     Raises:
@@ -327,6 +333,8 @@ def install_requirements(
     cmd: list[str] = [*pm_cmd, "install"] + applicable_reqs
     if index_url:
         cmd += ["--index-url", index_url]
+    for extra_index_url in extra_index_urls or []:
+        cmd += ["--extra-index-url", extra_index_url]
     if trusted_host:
         if isinstance(trusted_host, bool):
             if index_url:
@@ -392,10 +400,25 @@ def install_requirements(
 
 
 def install_module_requirements(
-    module: schema.ModuleSpec, *, index_url: str | None = None, trusted_host: str | bool | None = None
-):
+    module: schema.ModuleSpec,
+    *,
+    index_url: str | None = None,
+    extra_index_urls: list[str] | None = None,
+    trusted_host: str | bool | None = None,
+) -> None:
+    """Install only unsatisfied module dependencies using the selected indexes.
+
+    Args:
+        module: Module declaring package requirements and Git references.
+        index_url: Optional primary package index override.
+        extra_index_urls: Optional additional package indexes, in supplied order.
+        trusted_host: Host to trust, or True to use the primary index's hostname.
+
+    Raises:
+        RuntimeError: Dependency checks or installation fail.
+    """
     unsatisfied = unsatisfied_requirements(module)
-    install_requirements(unsatisfied)
+    install_requirements(unsatisfied, index_url=index_url, extra_index_urls=extra_index_urls, trusted_host=trusted_host)
 
 
 def _resolve_entry_callable(

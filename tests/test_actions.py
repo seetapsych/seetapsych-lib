@@ -1,4 +1,4 @@
-"""Offline regression tests for installer output forwarding."""
+"""Offline regression tests for dependency installation and output forwarding."""
 
 from __future__ import annotations
 
@@ -249,3 +249,62 @@ def test_package_manager_falls_back_to_pip(pip_available: bool, monkeypatch: pyt
 
     assert actions.package_manager() == ("pip", [sys.executable, "-m", "pip"], {})
     assert bootstrap.call_count == (0 if pip_available else 1)
+
+
+@pytest.mark.parametrize("pm_name", ["uv", "pip"])
+@pytest.mark.parametrize(
+    ("index_url", "extra_index_urls"),
+    [
+        (None, None),
+        ("https://primary.example/simple", None),
+        (None, ["https://extra.example/simple"]),
+        ("https://primary.example/simple", ["https://first.example/simple", "https://second.example/simple"]),
+    ],
+)
+def test_install_requirements_passes_indexes(
+    pm_name: str,
+    index_url: str | None,
+    extra_index_urls: list[str] | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(actions, "package_manager", lambda: (pm_name, ["installer"], {}))
+    proc = Mock(stderr=io.BytesIO(), wait=Mock(return_value=0))
+    popen = Mock(return_value=proc)
+    monkeypatch.setattr(actions.subprocess, "Popen", popen)
+    requirements = ["example-package>=1", "skipped-package; python_version < '2'"]
+
+    actions.install_requirements(requirements, index_url=index_url, extra_index_urls=extra_index_urls)
+
+    expected = ["installer", "install", "example-package>=1"]
+    if index_url is not None:
+        expected += ["--index-url", index_url]
+    for url in extra_index_urls or []:
+        expected += ["--extra-index-url", url]
+    assert popen.call_args.args[0] == expected
+
+
+@pytest.mark.parametrize("trusted_host", [None, True, "primary.example"])
+def test_install_module_requirements_forwards_options(
+    trusted_host: str | bool | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = actions.schema.ModuleSpec(uid="test-index-module", requirements=["example-package>=1"])
+    requirements = ["example-package>=1"]
+    check = Mock(return_value=requirements)
+    install = Mock()
+    monkeypatch.setattr(actions, "unsatisfied_requirements", check)
+    monkeypatch.setattr(actions, "install_requirements", install)
+
+    actions.install_module_requirements(
+        module,
+        index_url="https://primary.example/simple",
+        extra_index_urls=["https://extra.example/simple"],
+        trusted_host=trusted_host,
+    )
+
+    check.assert_called_once_with(module)
+    install.assert_called_once_with(
+        requirements,
+        index_url="https://primary.example/simple",
+        extra_index_urls=["https://extra.example/simple"],
+        trusted_host=trusted_host,
+    )
